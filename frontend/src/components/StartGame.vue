@@ -52,15 +52,8 @@ async function start() {
 
 <template>
   <section class="bench bench-message">
-    <a
-      class="start-dashboard-link"
-      href="/dashboard"
-      @click.prevent="$emit('navigate', '/dashboard')"
-      >View season dashboard →</a
-    >
-    <img class="club-mark" src="/campus-monferrato.png" alt="" width="48" height="48" />
+    <img class="club-mark" src="/campus-monferrato.png" alt="" />
     <h1>Campus Monferrato U13</h1>
-    <p>Start the bench log. Taps are stored on this device first.</p>
     <form class="start-form" @submit.prevent="start">
       <label>
         Opponent
@@ -75,5 +68,11 @@ async function start() {
         {{ saving ? "Saving…" : "Start game" }}
       </button>
     </form>
+    <a
+      class="start-dashboard-link"
+      href="/dashboard"
+      @click.prevent="$emit('navigate', '/dashboard')"
+      >View season dashboard →</a
+    >
   </section>
 </template>

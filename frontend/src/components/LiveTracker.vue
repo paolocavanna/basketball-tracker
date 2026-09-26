@@ -138,13 +138,7 @@ watch(
 
   <section v-else class="bench">
     <header class="top">
-      <img
-        class="club-mark"
-        src="/campus-monferrato.png"
-        alt="Campus Monferrato U13"
-        width="36"
-        height="36"
-      />
+      <img class="club-mark" src="/campus-monferrato.png" alt="Campus Monferrato U13" />
       <p class="opponent">{{ game?.opponent_name || "Live tracker" }}</p>
       <p
         class="sync-pill"

@@ -63,10 +63,12 @@ p {
   margin: 0;
 }
 
+a {
+  text-decoration: none;
+}
+
 .club-mark {
   display: block;
-  width: 48px;
-  height: 48px;
   flex: 0 0 auto;
   border-radius: 50%;
 }
@@ -83,7 +85,6 @@ p {
 }
 
 .bench-message {
-  justify-content: center;
   gap: var(--space);
   overflow: auto;
 }
@@ -108,8 +109,7 @@ p {
 /* The badge is a navy disc, so on the navy bench it needs a faint rim to keep
    its edge readable. */
 .bench .club-mark {
-  width: 36px;
-  height: 36px;
+  margin: 2rem auto;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-on-primary) 20%, transparent);
 }
 
@@ -801,8 +801,8 @@ p {
 .start-dashboard-link {
   align-self: flex-start;
   color: var(--color-accent);
-  font-size: 0.85rem;
-  font-weight: 750;
+  display: inline-block;
+  margin-top: auto;
 }
 
 @media (width >= 900px) {
@@ -847,8 +847,7 @@ p {
   }
 
   .club-mark {
-    width: 40px;
-    height: 40px;
+    width: 70%;
     flex-basis: 40px;
   }
 
