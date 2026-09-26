@@ -113,6 +113,14 @@ a {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-on-primary) 20%, transparent);
 }
 
+/* The start screen uses the large badge. On the live header the same image
+   stays a small mark, otherwise it pushes Undo and End game over the stats. */
+.bench .top .club-mark {
+  width: 36px;
+  height: 36px;
+  margin: 0;
+}
+
 .opponent {
   overflow: hidden;
   font-size: 1rem;
@@ -210,9 +218,9 @@ a {
 }
 
 /* Two columns keeps all six targets inside the thumb arc on a phone held in
-   one hand. Rows stretch to fill whatever height is left over, so Undo always
-   sits directly under the last row and the 56px floor keeps every target well
-   over the 44px minimum. */
+   one hand. Rows stretch to fill whatever height is left over. Undo and End
+   game sit under the last row, and the 56px floor keeps every stat target
+   well over the 44px minimum. */
 .actions {
   display: grid;
   flex: 1 1 auto;
@@ -224,6 +232,7 @@ a {
 
 .action,
 .undo,
+.end-game,
 .start {
   min-width: var(--tap-min);
   min-height: var(--tap-min);
@@ -257,18 +266,44 @@ a {
   color: var(--color-on-primary);
 }
 
-.undo {
-  display: flex;
+.bench-footer {
+  display: grid;
   flex: 0 0 auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--gap);
+  margin-top: 4px;
+}
+
+.undo,
+.end-game {
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
+  min-width: 0;
   min-height: 52px;
-  margin-top: 4px;
+  padding-inline: 8px;
+}
+
+.undo {
   border: 2px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
   background: color-mix(in srgb, var(--color-accent) 10%, transparent);
   color: var(--color-accent);
   font-size: 1.1rem;
+}
+
+.end-game {
+  background: var(--color-secondary);
+  color: var(--color-on-primary);
+  font-size: 1.05rem;
+  white-space: nowrap;
+}
+
+.undo-caption,
+.undo-target {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .undo-target {
@@ -287,6 +322,7 @@ a {
 
 .action:active,
 .undo:active,
+.end-game:active,
 .start:active {
   filter: brightness(0.88);
   transform: scale(0.985);
@@ -342,6 +378,7 @@ a {
 
 .action:focus-visible,
 .undo:focus-visible,
+.end-game:focus-visible,
 .start:focus-visible,
 .start-form input:focus-visible {
   outline: 3px solid var(--color-on-primary);
@@ -890,16 +927,28 @@ a {
 }
 
 /* Tablet and desktop: three columns keeps the buttons chunky without turning
-   the row height up. */
+   the row height up. A tall window gives End game its own full-width row
+   under Undo, so the way out of the game is a bar rather than half a row. */
 @media (width >= 600px) {
   .actions {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
+@media (height >= 640px) {
+  .bench-footer {
+    grid-template-columns: 1fr;
+  }
+
+  .end-game {
+    font-size: 1.2rem;
+  }
+}
+
 /* Landscape phone and any other short viewport: two rows of three, and a
-   shorter header, score and tally. The 44px floor still fits above Undo in a
-   320px-tall window, which is the shortest phone this screen is aimed at. */
+   shorter header, score and tally. The 44px floor still fits above Undo and
+   End game in a 320px-tall window, which is the shortest phone this screen
+   is aimed at. */
 @media (height <= 560px) {
   .bench {
     gap: 4px;
@@ -913,6 +962,12 @@ a {
   .bench .club-mark {
     width: 28px;
     height: 28px;
+  }
+
+  .bench .top .club-mark {
+    width: 28px;
+    height: 28px;
+    margin: 0;
   }
 
   .scoreboard {
@@ -945,13 +1000,19 @@ a {
     gap: 6px;
   }
 
+  .bench-footer {
+    gap: 6px;
+    margin-top: 0;
+  }
+
   .action,
-  .undo {
+  .undo,
+  .end-game {
     font-size: 1rem;
   }
 
-  .undo {
+  .undo,
+  .end-game {
     min-height: var(--tap-min);
-    margin-top: 0;
   }
 }

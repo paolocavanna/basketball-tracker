@@ -194,9 +194,14 @@ watch(
       </button>
     </div>
 
-    <button type="button" class="undo" :disabled="!ready || !canUndo" @click="undo">
-      <span class="undo-caption">{{ text.tracker.undo }}</span>
-      <span v-if="undoLabel" class="undo-target">{{ undoLabel }}</span>
-    </button>
+    <div class="bench-footer">
+      <button type="button" class="undo" :disabled="!ready || !canUndo" @click="undo">
+        <span class="undo-caption">{{ text.tracker.undo }}</span>
+        <span v-if="undoLabel" class="undo-target">{{ undoLabel }}</span>
+      </button>
+      <button type="button" class="end-game" @click="emit('navigate', '/')">
+        {{ text.tracker.endGame }}
+      </button>
+    </div>
   </section>
 </template>

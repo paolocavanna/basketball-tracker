@@ -36,7 +36,8 @@
     "ppp": "PPP",
     "reboundsShort": "Reb off/def",
     "turnoversShort": "TOV",
-    "undo": "Undo"
+    "undo": "Undo",
+    "endGame": "End game"
   },
   "dashboard": {
     "logoAlt": "Campus Monferrato U13",
