@@ -2,6 +2,7 @@
 import { onMounted, onUnmounted, ref } from "vue";
 import LiveTracker from "./components/LiveTracker.vue";
 import StartGame from "./components/StartGame.vue";
+import DashboardView from "./components/DashboardView.vue";
 import { createLocalStore } from "./lib/localStore.js";
 import { parseRoute } from "./lib/route.js";
 import { createSyncManager } from "./lib/syncManager.js";
@@ -38,8 +39,9 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <DashboardView v-if="route.name === 'dashboard'" @navigate="navigate" />
   <LiveTracker
-    v-if="route.name === 'live'"
+    v-else-if="route.name === 'live'"
     :key="route.gameId"
     :game-id="route.gameId"
     :store="store"

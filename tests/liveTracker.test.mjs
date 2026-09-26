@@ -69,10 +69,12 @@ function clock() {
 }
 
 describe("live route", () => {
-  it("reads the bench path and leaves unknown paths on the start screen", () => {
+  it("reads the bench path, the dashboard, and leaves unknown paths on the start screen", () => {
     assert.deepEqual(parseRoute(`/game/${GAME_ID}/live`), { name: "live", gameId: GAME_ID });
     assert.deepEqual(parseRoute(`/game/${GAME_ID}/live/`), { name: "live", gameId: GAME_ID });
     assert.deepEqual(parseRoute("/"), { name: "start" });
+    assert.deepEqual(parseRoute("/dashboard"), { name: "dashboard" });
+    assert.deepEqual(parseRoute("/dashboard/"), { name: "dashboard" });
     assert.deepEqual(parseRoute("/missing"), { name: "start" });
     assert.equal(livePath(GAME_ID), `/game/${GAME_ID}/live`);
   });
