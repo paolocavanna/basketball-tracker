@@ -1,15 +1,16 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
+import text from "../text/en.json";
 import { commitTap, commitUndo, formatPpp, isPending, mergeStoredEvents } from "../lib/liveLog.js";
 import { computeStats } from "../lib/stats.js";
 
 const ACTIONS = [
-  { type: "SCORE", points: 2, label: "+2", tone: "score" },
-  { type: "SCORE", points: 3, label: "+3", tone: "score" },
-  { type: "EMPTY", points: 0, label: "EMPTY", tone: "empty" },
-  { type: "TOV", points: 0, label: "TOV", tone: "turnover" },
-  { type: "OFF_REB", points: 0, label: "OFF REB", tone: "rebound" },
-  { type: "DEF_REB", points: 0, label: "DEF REB", tone: "rebound" },
+  { type: "SCORE", points: 2, label: text.actions.two, tone: "score" },
+  { type: "SCORE", points: 3, label: text.actions.three, tone: "score" },
+  { type: "EMPTY", points: 0, label: text.actions.empty, tone: "empty" },
+  { type: "TOV", points: 0, label: text.actions.turnover, tone: "turnover" },
+  { type: "OFF_REB", points: 0, label: text.actions.offensiveRebound, tone: "rebound" },
+  { type: "DEF_REB", points: 0, label: text.actions.defensiveRebound, tone: "rebound" },
 ];
 
 const props = defineProps({
@@ -59,7 +60,7 @@ function record(type, points) {
   void result.persisted.then((outcome) => {
     if (outcome.ok) return;
     events.value = events.value.filter((event) => event.id !== outcome.event.id);
-    notice.value = "Not saved";
+    notice.value = text.tracker.notSaved;
   });
 }
 
@@ -77,7 +78,7 @@ function undo() {
     events.value = events.value.map((event) =>
       event.id === outcome.event.id ? outcome.event : event,
     );
-    notice.value = "Not saved";
+    notice.value = text.tracker.notSaved;
   });
 }
 
@@ -126,54 +127,56 @@ watch(
 
 <template>
   <section v-if="missing" class="bench bench-message">
-    <h1>Game not on this device</h1>
-    <p>Stats recorded on this phone stay in its local log. Start a game here to track a new one.</p>
-    <button type="button" class="start" @click="emit('navigate', '/')">Start a game</button>
+    <h1>{{ text.tracker.notOnDeviceTitle }}</h1>
+    <p>{{ text.tracker.notOnDeviceBody }}</p>
+    <button type="button" class="start" @click="emit('navigate', '/')">
+      {{ text.tracker.startGame }}
+    </button>
   </section>
 
   <section v-else-if="failed" class="bench bench-message">
-    <h1>Local log unavailable</h1>
-    <p>This browser could not open the on-device game log, so taps cannot be saved.</p>
+    <h1>{{ text.tracker.logUnavailableTitle }}</h1>
+    <p>{{ text.tracker.logUnavailableBody }}</p>
   </section>
 
   <section v-else class="bench">
     <header class="top">
-      <img class="club-mark" src="/campus-monferrato.png" alt="Campus Monferrato U13" />
-      <p class="opponent">{{ game?.opponent_name || "Live tracker" }}</p>
+      <img class="club-mark" src="/campus-monferrato.png" :alt="text.brand.team" />
+      <p class="opponent">{{ game?.opponent_name || text.tracker.live }}</p>
       <p
         class="sync-pill"
         :class="{ 'sync-pill-pending': pending && !notice, 'sync-pill-alert': notice }"
         role="status"
-        :aria-label="notice ? 'That change was not saved on this device. Try again.' : undefined"
+        :aria-label="notice ? text.tracker.saveFailureLabel : undefined"
       >
         <span class="sync-dot" aria-hidden="true"></span>
-        <span>{{ notice || (pending ? "Pending" : "Synced") }}</span>
+        <span>{{ notice || (pending ? text.tracker.pending : text.tracker.synced) }}</span>
       </p>
     </header>
 
     <div class="scoreboard">
       <p class="score">{{ stats.points }}</p>
-      <p class="score-label">Points</p>
+      <p class="score-label">{{ text.tracker.points }}</p>
     </div>
 
     <div class="tally" aria-live="polite">
       <p class="stat">
         <span class="stat-value">{{ stats.possessions }}</span>
-        <span class="stat-label">Poss</span>
+        <span class="stat-label">{{ text.tracker.possessionsShort }}</span>
       </p>
       <p class="stat">
         <span class="stat-value">{{ ppp }}</span>
-        <span class="stat-label">PPP</span>
+        <span class="stat-label">{{ text.tracker.ppp }}</span>
       </p>
       <p class="stat">
         <span class="stat-value"
           >{{ stats.offensive_rebounds }}/{{ stats.defensive_rebounds }}</span
         >
-        <span class="stat-label">Reb off/def</span>
+        <span class="stat-label">{{ text.tracker.reboundsShort }}</span>
       </p>
       <p class="stat">
         <span class="stat-value">{{ stats.turnovers }}</span>
-        <span class="stat-label">TOV</span>
+        <span class="stat-label">{{ text.tracker.turnoversShort }}</span>
       </p>
     </div>
 
@@ -192,7 +195,7 @@ watch(
     </div>
 
     <button type="button" class="undo" :disabled="!ready || !canUndo" @click="undo">
-      <span class="undo-caption">Undo</span>
+      <span class="undo-caption">{{ text.tracker.undo }}</span>
       <span v-if="undoLabel" class="undo-target">{{ undoLabel }}</span>
     </button>
   </section>

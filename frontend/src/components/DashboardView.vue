@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
+import text from "../text/en.json";
 import { SEEDED_TEAM_ID, loadTeamId } from "../lib/team.js";
 import {
   polylinePoints,
@@ -40,13 +41,13 @@ async function selectGame(id) {
   if (!id) return;
   try {
     const response = await fetch(`/api/games/${encodeURIComponent(id)}`);
-    if (!response.ok) throw new Error("Game details could not be loaded.");
+    if (!response.ok) throw new Error(text.dashboard.detailLoadError);
     const detail = await response.json();
     if (selectedId.value !== id) return;
     selectedGame.value = detail;
   } catch {
     if (selectedId.value !== id) return;
-    detailError.value = "Game details could not be loaded.";
+    detailError.value = text.dashboard.detailLoadError;
   }
 }
 
@@ -54,12 +55,12 @@ onMounted(async () => {
   teamId.value = await loadTeamId();
   try {
     const response = await fetch(`/api/stats/season?team_id=${teamId.value}`);
-    if (!response.ok) throw new Error("Season data could not be loaded.");
+    if (!response.ok) throw new Error(text.dashboard.seasonLoadError);
     const season = await response.json();
     games.value = season.games || [];
     if (games.value.length) await selectGame(games.value.at(-1).id);
   } catch {
-    seasonError.value = "Season data could not be loaded.";
+    seasonError.value = text.dashboard.seasonLoadError;
   } finally {
     loading.value = false;
   }
@@ -74,7 +75,11 @@ const possessions = computed(() => {
     if (event.type === "SCORE") current.points += Number(event.points || 0);
     if (["SCORE", "EMPTY", "TOV"].includes(event.type)) {
       current.result =
-        event.type === "TOV" ? "Turnover" : event.type === "EMPTY" ? "Empty" : `+${event.points}`;
+        event.type === "TOV"
+          ? text.dashboard.turnover
+          : event.type === "EMPTY"
+            ? text.dashboard.empty
+            : `+${event.points}`;
       result.push(current);
       current = { points: 0, offensiveRebounds: 0, result: "" };
     }
@@ -102,6 +107,21 @@ const turnoverLine = computed(() =>
 function turnoverY(value) {
   return trendY(Number(value) || 0, turnoverCeiling.value);
 }
+
+function possessionAlt(count) {
+  return text.dashboard.pointsEachPossessionAlt.replace("{count}", count);
+}
+
+function possessionTitle(index, possession) {
+  const rebounds = possession.offensiveRebounds
+    ? `, ${possession.offensiveRebounds} ${text.dashboard.offensiveReboundsCount}`
+    : "";
+  return text.dashboard.possessionLabel
+    .replace("{number}", index + 1)
+    .replace("{points}", possession.points)
+    .replace("{result}", possession.result)
+    .replace("{rebounds}", rebounds);
+}
 </script>
 
 <template>
@@ -110,47 +130,47 @@ function turnoverY(value) {
       <img
         class="club-mark"
         src="/campus-monferrato.png"
-        alt="Campus Monferrato U13"
+        :alt="text.dashboard.logoAlt"
         width="48"
         height="48"
       />
       <div class="dashboard-heading">
-        <p class="eyebrow">Campus Monferrato · U13</p>
-        <h1>Season dashboard</h1>
+        <p class="eyebrow">{{ text.brand.short }}</p>
+        <h1>{{ text.dashboard.title }}</h1>
       </div>
       <a class="dashboard-home" href="/" @click.prevent="$emit('navigate', '/')"
-        >Bench tracker <span aria-hidden="true">↗</span></a
+        >{{ text.dashboard.backToTracker }} <span aria-hidden="true">↗</span></a
       >
     </header>
 
-    <p v-if="loading" class="dashboard-message">Loading the season…</p>
+    <p v-if="loading" class="dashboard-message">{{ text.dashboard.loadingSeason }}</p>
     <p v-else-if="seasonError" class="dashboard-message dashboard-error" role="alert">
       {{ seasonError }}
     </p>
     <p v-else-if="!games.length" class="dashboard-message">
-      No games recorded yet. Start a game to build your season view.
+      {{ text.dashboard.noGames }}
     </p>
 
     <template v-else>
       <section class="season-section">
         <div class="section-title">
           <div>
-            <p class="eyebrow">The season so far</p>
-            <h2>Team trends</h2>
+            <p class="eyebrow">{{ text.dashboard.seasonSoFar }}</p>
+            <h2>{{ text.dashboard.teamTrends }}</h2>
           </div>
-          <span>{{ games.length }} games</span>
+          <span>{{ games.length }} {{ text.dashboard.gamesCount }}</span>
         </div>
         <div class="trend-grid">
           <article class="trend-card">
             <div class="trend-heading">
-              <h3>Points per possession</h3>
+              <h3>{{ text.dashboard.pointsPerPossession }}</h3>
               <span class="trend-current">{{ formatPpp(games.at(-1).points_per_possession) }}</span>
             </div>
             <svg
               class="trend-chart"
               viewBox="0 0 320 124"
               role="img"
-              aria-label="Points per possession by game, in date order"
+              :aria-label="text.dashboard.pppByGameAlt"
             >
               <path class="chart-gridline" d="M24 20H296 M24 63H296 M24 106H296" />
               <polyline
@@ -170,19 +190,20 @@ function turnoverY(value) {
             </svg>
             <div class="chart-caption">
               <span>{{ formatDate(games[0].date) }}</span
-              ><span>Chronological</span><span>{{ formatDate(games.at(-1).date) }}</span>
+              ><span>{{ text.dashboard.chronological }}</span
+              ><span>{{ formatDate(games.at(-1).date) }}</span>
             </div>
           </article>
           <article class="trend-card">
             <div class="trend-heading">
-              <h3>Turnovers</h3>
+              <h3>{{ text.dashboard.turnovers }}</h3>
               <span class="trend-current">{{ games.at(-1).turnovers }}</span>
             </div>
             <svg
               class="trend-chart"
               viewBox="0 0 320 124"
               role="img"
-              aria-label="Turnovers by game, in date order"
+              :aria-label="text.dashboard.turnoversByGameAlt"
             >
               <path class="chart-gridline" d="M24 20H296 M24 63H296 M24 106H296" />
               <polyline
@@ -201,22 +222,23 @@ function turnoverY(value) {
             </svg>
             <div class="chart-caption">
               <span>{{ formatDate(games[0].date) }}</span
-              ><span>Chronological</span><span>{{ formatDate(games.at(-1).date) }}</span>
+              ><span>{{ text.dashboard.chronological }}</span
+              ><span>{{ formatDate(games.at(-1).date) }}</span>
             </div>
           </article>
           <article class="trend-card trend-card-wide">
             <div class="trend-heading">
-              <h3>Rebounds per 10 possessions</h3>
+              <h3>{{ text.dashboard.reboundsPerTen }}</h3>
               <div class="legend">
-                <span><i class="legend-off"></i>Offensive</span
-                ><span><i class="legend-def"></i>Defensive</span>
+                <span><i class="legend-off"></i>{{ text.dashboard.offensive }}</span
+                ><span><i class="legend-def"></i>{{ text.dashboard.defensive }}</span>
               </div>
             </div>
             <svg
               class="trend-chart"
               viewBox="0 0 320 124"
               role="img"
-              aria-label="Offensive and defensive rebounds per 10 possessions by game, in date order"
+              :aria-label="text.dashboard.reboundsByGameAlt"
             >
               <path class="chart-gridline" d="M24 20H296 M24 63H296 M24 106H296" />
               <polyline
@@ -248,7 +270,8 @@ function turnoverY(value) {
             </svg>
             <div class="chart-caption">
               <span>{{ formatDate(games[0].date) }}</span
-              ><span>Chronological</span><span>{{ formatDate(games.at(-1).date) }}</span>
+              ><span>{{ text.dashboard.chronological }}</span
+              ><span>{{ formatDate(games.at(-1).date) }}</span>
             </div>
           </article>
         </div>
@@ -258,11 +281,11 @@ function turnoverY(value) {
         <aside class="game-list-panel">
           <div class="section-title section-title-compact">
             <div>
-              <p class="eyebrow">Game by game</p>
-              <h2>Games</h2>
+              <p class="eyebrow">{{ text.dashboard.gameByGame }}</p>
+              <h2>{{ text.dashboard.games }}</h2>
             </div>
           </div>
-          <label class="game-picker-label" for="game-picker">Choose a game</label>
+          <label class="game-picker-label" for="game-picker">{{ text.dashboard.chooseGame }}</label>
           <select
             id="game-picker"
             v-model="selectedId"
@@ -284,7 +307,8 @@ function turnoverY(value) {
               ><strong>{{ game.opponent_name }}</strong
               ><small>{{ formatDate(game.date) }}</small></span
             ><span class="game-list-ppp"
-              >{{ formatPpp(game.points_per_possession) }}<small>PPP</small></span
+              >{{ formatPpp(game.points_per_possession)
+              }}<small>{{ text.dashboard.ppp }}</small></span
             >
           </button>
         </aside>
@@ -294,7 +318,7 @@ function turnoverY(value) {
             <div class="game-detail-title">
               <div>
                 <p class="eyebrow">{{ formatDate(selectedSummary.date) }}</p>
-                <h2>vs. {{ selectedSummary.opponent_name }}</h2>
+                <h2>{{ text.dashboard.vs }} {{ selectedSummary.opponent_name }}</h2>
               </div>
               <div v-if="selectedSummary.final_score_for != null" class="final-score">
                 {{ selectedSummary.final_score_for }}<span>–</span
@@ -304,42 +328,47 @@ function turnoverY(value) {
             <div class="game-stat-grid">
               <div>
                 <strong>{{ selectedSummary.possessions }}</strong
-                ><span>Possessions</span>
+                ><span>{{ text.dashboard.possessions }}</span>
               </div>
               <div>
                 <strong>{{ formatPpp(selectedSummary.points_per_possession) }}</strong
-                ><span>Points / possession</span>
+                ><span>{{ text.dashboard.pointsPerPossessionShort }}</span>
               </div>
               <div>
                 <strong>{{ selectedSummary.turnovers }}</strong
-                ><span>Turnovers</span>
+                ><span>{{ text.dashboard.turnoversLabel }}</span>
               </div>
               <div>
                 <strong
                   >{{ selectedSummary.offensive_rebounds }} <i>/</i>
                   {{ selectedSummary.defensive_rebounds }}</strong
-                ><span>Off. / def. rebounds</span>
+                ><span>{{ text.dashboard.reboundSplit }}</span>
               </div>
             </div>
             <article class="possession-card">
               <div class="possession-heading">
                 <div>
-                  <p class="eyebrow">Possession by possession</p>
-                  <h3>Points on each trip</h3>
+                  <p class="eyebrow">{{ text.dashboard.possessionByPossession }}</p>
+                  <h3>{{ text.dashboard.pointsOnTrip }}</h3>
                 </div>
-                <span>PPP = {{ formatPpp(selectedSummary.points_per_possession) }}</span>
+                <span
+                  >{{ text.dashboard.pppEquals }}
+                  {{ formatPpp(selectedSummary.points_per_possession) }}</span
+                >
               </div>
               <p v-if="detailError" class="detail-error" role="alert">{{ detailError }}</p>
-              <p v-else-if="!selectedGame" class="chart-loading">Loading possession detail…</p>
+              <p v-else-if="!selectedGame" class="chart-loading">
+                {{ text.dashboard.loadingDetail }}
+              </p>
               <p v-else-if="!possessions.length" class="chart-loading">
-                No possessions recorded for this game.
+                {{ text.dashboard.noPossessions }}
               </p>
               <div v-else class="possession-chart-scroll">
                 <svg
                   class="possession-chart"
                   :viewBox="`0 0 ${Math.max(360, possessions.length * 42 + 32)} 180`"
                   role="img"
-                  :aria-label="`Points scored on each of ${possessions.length} possessions`"
+                  :aria-label="possessionAlt(possessions.length)"
                 >
                   <path class="chart-gridline" d="M24 132H10000 M24 82H10000 M24 32H10000" />
                   <g v-for="(possession, index) in possessions" :key="index">
@@ -369,18 +398,14 @@ function turnoverY(value) {
                     <text class="bar-label" :x="41 + index * 42" y="154" text-anchor="middle">
                       {{ index + 1 }}
                     </text>
-                    <title>
-                      Possession {{ index + 1 }}: {{ possession.points }} points,
-                      {{ possession.result }}<template v-if="possession.offensiveRebounds">,
-                      {{ possession.offensiveRebounds }} offensive rebounds</template>
-                    </title>
+                    <title>{{ possessionTitle(index, possession) }}</title>
                   </g>
                 </svg>
               </div>
               <div class="possession-legend">
-                <span><i class="legend-score"></i>Points scored</span
-                ><span><i class="legend-zero"></i>No points</span
-                ><span>Rebounds continue the possession</span>
+                <span><i class="legend-score"></i>{{ text.dashboard.pointsScored }}</span
+                ><span><i class="legend-zero"></i>{{ text.dashboard.noPoints }}</span
+                ><span>{{ text.dashboard.reboundsContinue }}</span>
               </div>
             </article>
           </template>

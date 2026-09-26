@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, ref } from "vue";
+import text from "../text/en.json";
 import { livePath } from "../lib/route.js";
 import { SEEDED_TEAM_ID, loadTeamId } from "../lib/team.js";
 
@@ -42,7 +43,7 @@ async function start() {
     });
   } catch {
     saving.value = false;
-    error.value = "Could not save the game on this device.";
+    error.value = text.start.saveError;
     return;
   }
   props.sync.kick();
@@ -53,26 +54,26 @@ async function start() {
 <template>
   <section class="bench bench-message">
     <img class="club-mark" src="/campus-monferrato.png" alt="" />
-    <h1>Campus Monferrato U13</h1>
+    <h1>{{ text.brand.team }}</h1>
     <form class="start-form" @submit.prevent="start">
       <label>
-        Opponent
+        {{ text.start.opponent }}
         <input v-model="opponent" name="opponent" type="text" required autocomplete="off" />
       </label>
       <label>
-        Date
+        {{ text.start.date }}
         <input v-model="date" name="date" type="date" required />
       </label>
       <p v-if="error" class="form-error" role="alert">{{ error }}</p>
       <button type="submit" class="start" :disabled="saving">
-        {{ saving ? "Saving…" : "Start game" }}
+        {{ saving ? text.start.saving : text.start.startGame }}
       </button>
     </form>
     <a
       class="start-dashboard-link"
       href="/dashboard"
       @click.prevent="$emit('navigate', '/dashboard')"
-      >View season dashboard →</a
+      >{{ text.start.dashboard }}</a
     >
   </section>
 </template>
