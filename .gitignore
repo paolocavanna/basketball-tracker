@@ -1,1 +1,9 @@
 .tokensave
+notes.md
+node_modules
+.env
+.dev.vars
+.wrangler/
+*.db
+*.db-wal
+*.db-shm
