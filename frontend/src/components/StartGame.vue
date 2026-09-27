@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import text from "../text/en.json";
+import RecentGames from "./RecentGames.vue";
 import type { LocalStore } from "../lib/localStore.ts";
 import { livePath } from "../lib/route.ts";
 import type { SyncManager } from "../lib/syncManager.ts";
@@ -40,6 +41,7 @@ async function start(): Promise<void> {
       date: date.value,
       opponent_name: name,
       created_at: new Date().toISOString(),
+      status: "in-progress",
     };
     await props.store.saveGame(game);
   } catch {
@@ -56,6 +58,7 @@ async function start(): Promise<void> {
   <section class="bench bench-message">
     <img class="club-mark" src="/campus-monferrato.png" alt="" />
     <h1>{{ text.brand.team }}</h1>
+    <RecentGames :store="store" @navigate="emit('navigate', $event)" />
     <form class="start-form" @submit.prevent="start">
       <label>
         {{ text.start.opponent }}

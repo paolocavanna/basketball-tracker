@@ -9,7 +9,7 @@ import {
   mergeStoredEvents,
 } from "../frontend/src/lib/liveLog.ts";
 import { createLocalStore } from "../frontend/src/lib/localStore.ts";
-import { parseRoute, livePath } from "../frontend/src/lib/route.ts";
+import { parseRoute, livePath, summaryPath } from "../frontend/src/lib/route.ts";
 import { computeStats } from "../frontend/src/lib/stats.ts";
 import { createSyncManager } from "../frontend/src/lib/syncManager.ts";
 import { SEEDED_TEAM_ID, loadTeamId } from "../frontend/src/lib/team.ts";
@@ -107,7 +107,16 @@ describe("live route", () => {
     assert.deepEqual(parseRoute("/dashboard"), { name: "dashboard" });
     assert.deepEqual(parseRoute("/dashboard/"), { name: "dashboard" });
     assert.deepEqual(parseRoute("/missing"), { name: "start" });
+    assert.deepEqual(parseRoute(`/game/${GAME_ID}/summary`), {
+      name: "summary",
+      gameId: GAME_ID,
+    });
+    assert.deepEqual(parseRoute(`/game/${GAME_ID}/summary/`), {
+      name: "summary",
+      gameId: GAME_ID,
+    });
     assert.equal(livePath(GAME_ID), `/game/${GAME_ID}/live`);
+    assert.equal(summaryPath(GAME_ID), `/game/${GAME_ID}/summary`);
   });
 
   it("uses the seeded team when the team list cannot be read", async () => {

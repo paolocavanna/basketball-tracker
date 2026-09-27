@@ -96,6 +96,7 @@ describe("games", () => {
 
       assert.equal(game.id, GAME_ID);
       assert.equal(game.synced, false);
+      assert.equal(game.status, "in-progress");
       assert.deepEqual(await store.loadGame(GAME_ID), game);
     }));
 

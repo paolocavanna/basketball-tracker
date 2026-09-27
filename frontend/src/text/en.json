@@ -37,7 +37,34 @@
     "reboundsShort": "Reb off/def",
     "turnoversShort": "TOV",
     "undo": "Undo",
-    "endGame": "End game"
+    "endGame": "End game",
+    "finished": "Finished",
+    "gameSummary": "Game summary",
+    "finishTitle": "Finish this game?",
+    "finishBody": "The game will be marked finished. Recorded events stay in the log. You can reopen the game and correct the log or the opponent score.",
+    "finishConfirm": "Finish game",
+    "finishCancel": "Cancel",
+    "finishSaveError": "Could not save the game on this device."
+  },
+  "recent": {
+    "title": "On this device",
+    "continueGame": "Continue",
+    "openGame": "Open",
+    "inProgress": "In progress",
+    "finished": "Finished",
+    "vs": "vs"
+  },
+  "summary": {
+    "loading": "Opening the game…",
+    "inProgress": "This game is still in progress.",
+    "team": "Team",
+    "opponentScore": "Opponent score",
+    "saveScore": "Save score",
+    "scoreSaved": "Score saved on this device.",
+    "invalidScore": "Enter the opponent score as a whole number from 0 to 999.",
+    "saveError": "Could not save the score on this device.",
+    "correctLog": "Correct the log",
+    "backToStart": "Back to start"
   },
   "dashboard": {
     "logoAlt": "Campus Monferrato U13",

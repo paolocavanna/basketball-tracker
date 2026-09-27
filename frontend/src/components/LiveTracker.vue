@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import text from "../text/en.json";
+import { applyFinishChoice, persistDerivedScore } from "../lib/gameLifecycle.ts";
 import { commitTap, commitUndo, formatPpp, isPending, mergeStoredEvents } from "../lib/liveLog.ts";
+import { gameStatus } from "../lib/localStore.ts";
 import type { LocalStore } from "../lib/localStore.ts";
+import { summaryPath } from "../lib/route.ts";
 import { computeStats } from "../lib/stats.ts";
 import type { SyncManager } from "../lib/syncManager.ts";
 import type { EventPayload, StoredEvent, StoredGame } from "../../../types.ts";
@@ -36,6 +39,9 @@ const ready = ref(false);
 const missing = ref(false);
 const failed = ref(false);
 const notice = ref("");
+const finishing = ref(false);
+const finishError = ref("");
+const finishDialog = ref<HTMLDialogElement | null>(null);
 let refreshToken = 0;
 
 // One source of truth for the button captions, so Undo can name the tap it
@@ -47,11 +53,25 @@ const EVENT_LABELS = new Map(
 const stats = computed(() => computeStats(events.value));
 const pending = computed(() => isPending(game.value, events.value));
 const canUndo = computed(() => events.value.some((event) => !event.deleted));
+const finished = computed(() => (game.value ? gameStatus(game.value) === "finished" : false));
 const ppp = computed(() => formatPpp(stats.value.points_per_possession));
 const undoLabel = computed(() => {
   const last = events.value.findLast((event) => !event.deleted);
   return last ? (EVENT_LABELS.get(`${last.type}:${last.points}`) ?? "") : "";
 });
+
+function rememberFinishedScore(next: StoredEvent[]): void {
+  const current = game.value;
+  if (!current || gameStatus(current) !== "finished") return;
+  void persistDerivedScore(props.store, current, next).then(
+    (saved) => {
+      if (saved) game.value = saved;
+    },
+    () => {
+      notice.value = text.tracker.notSaved;
+    },
+  );
+}
 
 function record(action: (typeof ACTIONS)[number]): void {
   if (!ready.value || missing.value || failed.value) return;
@@ -65,9 +85,12 @@ function record(action: (typeof ACTIONS)[number]): void {
   });
   events.value = result.events;
   void result.persisted.then((outcome) => {
-    if (outcome.ok) return;
-    events.value = events.value.filter((event) => event.id !== outcome.event.id);
-    notice.value = text.tracker.notSaved;
+    if (!outcome.ok) {
+      events.value = events.value.filter((event) => event.id !== outcome.event.id);
+      notice.value = text.tracker.notSaved;
+      return;
+    }
+    rememberFinishedScore(events.value);
   });
 }
 
@@ -81,12 +104,50 @@ function undo(): void {
   });
   events.value = result.events;
   void result.persisted.then((outcome) => {
-    if (outcome.ok || !outcome.event) return;
-    events.value = events.value.map((event) =>
-      event.id === outcome.event.id ? outcome.event : event,
-    );
-    notice.value = text.tracker.notSaved;
+    if (!outcome.ok) {
+      if (!outcome.event) return;
+      events.value = events.value.map((event) =>
+        event.id === outcome.event.id ? outcome.event : event,
+      );
+      notice.value = text.tracker.notSaved;
+      return;
+    }
+    rememberFinishedScore(events.value);
   });
+}
+
+function requestFinish(): void {
+  const current = game.value;
+  if (!current || !ready.value || missing.value || failed.value) return;
+  if (gameStatus(current) === "finished") {
+    emit("navigate", summaryPath(props.gameId));
+    return;
+  }
+  finishError.value = "";
+  const dialog = finishDialog.value;
+  if (dialog && !dialog.open) dialog.showModal();
+}
+
+function closeFinish(): void {
+  finishDialog.value?.close();
+}
+
+async function confirmFinish(): Promise<void> {
+  const current = game.value;
+  if (!current || finishing.value) return;
+  finishing.value = true;
+  finishError.value = "";
+  try {
+    game.value = await applyFinishChoice(props.store, "confirm", current, events.value);
+  } catch {
+    finishing.value = false;
+    finishError.value = text.tracker.finishSaveError;
+    return;
+  }
+  props.sync.kick();
+  finishDialog.value?.close();
+  finishing.value = false;
+  emit("navigate", summaryPath(props.gameId));
 }
 
 // A pass can settle while the log is still opening, and two refreshes can
@@ -166,6 +227,7 @@ watch(
     <div class="scoreboard">
       <p class="score">{{ stats.points }}</p>
       <p class="score-label">{{ text.tracker.points }}</p>
+      <p v-if="finished" class="finished-flag">{{ text.tracker.finished }}</p>
     </div>
 
     <div class="tally" aria-live="polite">
@@ -208,9 +270,28 @@ watch(
         <span class="undo-caption">{{ text.tracker.undo }}</span>
         <span v-if="undoLabel" class="undo-target">{{ undoLabel }}</span>
       </button>
-      <button type="button" class="end-game" @click="emit('navigate', '/')">
-        {{ text.tracker.endGame }}
+      <button type="button" class="end-game" @click="requestFinish">
+        {{ finished ? text.tracker.gameSummary : text.tracker.endGame }}
       </button>
     </div>
+
+    <dialog
+      ref="finishDialog"
+      class="finish-dialog"
+      aria-labelledby="finish-title"
+      aria-describedby="finish-body"
+    >
+      <h2 id="finish-title">{{ text.tracker.finishTitle }}</h2>
+      <p id="finish-body">{{ text.tracker.finishBody }}</p>
+      <p v-if="finishError" class="form-error" role="alert">{{ finishError }}</p>
+      <div class="finish-actions">
+        <button type="button" class="finish-cancel" @click="closeFinish">
+          {{ text.tracker.finishCancel }}
+        </button>
+        <button type="button" class="finish-confirm" :disabled="finishing" @click="confirmFinish">
+          {{ text.tracker.finishConfirm }}
+        </button>
+      </div>
+    </dialog>
   </section>
 </template>

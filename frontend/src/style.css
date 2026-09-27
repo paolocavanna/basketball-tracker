@@ -379,8 +379,7 @@ a {
 .action:focus-visible,
 .undo:focus-visible,
 .end-game:focus-visible,
-.start:focus-visible,
-.start-form input:focus-visible {
+.start:focus-visible {
   outline: 3px solid var(--color-on-primary);
   outline-offset: 2px;
 }
@@ -1025,4 +1024,209 @@ a {
   .end-game {
     min-height: var(--tap-min);
   }
+}
+
+.finished-flag {
+  margin: 0;
+  color: var(--color-accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.finish-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 20px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.finish-dialog::backdrop {
+  background: color-mix(in srgb, var(--color-primary) 72%, transparent);
+}
+
+.finish-dialog h2 {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+}
+
+.finish-dialog p {
+  color: var(--color-muted);
+}
+
+.finish-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap);
+  margin-top: 16px;
+}
+
+.finish-cancel,
+.finish-confirm,
+.summary-done,
+.recent-action {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  border-radius: var(--radius);
+  font-weight: 800;
+}
+
+.finish-cancel,
+.summary-done {
+  border: 2px solid color-mix(in srgb, var(--color-on-primary) 35%, transparent);
+  background: transparent;
+  color: var(--color-on-primary);
+}
+
+.finish-confirm {
+  border: 0;
+  background: var(--color-secondary);
+  color: var(--color-on-primary);
+}
+
+.finish-confirm:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.recent-games {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recent-games h2 {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.recent-games ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recent-games li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 12px;
+}
+
+.bench .recent-games li {
+  background: var(--color-faint);
+}
+
+.recent-copy {
+  min-width: 0;
+}
+
+.recent-opponent,
+.recent-meta,
+.recent-score {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-opponent {
+  font-weight: 800;
+}
+
+.recent-meta,
+.recent-score {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.recent-continue {
+  border: 0;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.bench .recent-open {
+  border: 2px solid color-mix(in srgb, var(--color-on-primary) 35%, transparent);
+  background: transparent;
+  color: var(--color-on-primary);
+}
+
+.dashboard .recent-games {
+  margin-bottom: 22px;
+}
+
+.dashboard .recent-games h2,
+.dashboard .recent-opponent {
+  color: var(--color-primary);
+}
+
+.dashboard .recent-games li {
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-on-primary));
+}
+
+.dashboard .recent-meta,
+.dashboard .recent-score {
+  color: color-mix(in srgb, var(--color-primary) 68%, transparent);
+}
+
+.dashboard .recent-open {
+  border: 2px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+  background: transparent;
+  color: var(--color-primary);
+}
+
+.summary-score-form,
+.summary-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+}
+
+.summary-score-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.summary-score-form input {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-on-accent);
+  color-scheme: light;
+  font-size: 1rem;
+}
+
+.score-saved {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.finish-cancel:focus-visible,
+.finish-confirm:focus-visible,
+.recent-action:focus-visible,
+.summary-done:focus-visible,
+.start-form input:focus-visible,
+.summary-score-form input:focus-visible {
+  outline: 3px solid var(--color-on-primary);
+  outline-offset: 2px;
+}
+
+.dashboard .recent-action:focus-visible {
+  outline-color: var(--color-primary);
 }

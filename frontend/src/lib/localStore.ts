@@ -8,6 +8,7 @@
 import type {
   EventType,
   GameRecord,
+  GameStatus,
   NewStoredEvent,
   StoredEvent,
   StoredGame,
@@ -41,6 +42,15 @@ const EVENT_POINTS: Record<EventType, 0 | 2> = {
 // derived stat changes either way.
 const byCourtTime = (a: StoredEvent, b: StoredEvent) =>
   a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
+
+const byNewestGame = (a: StoredGame, b: StoredGame) =>
+  String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")) ||
+  String(b.id).localeCompare(String(a.id));
+
+// Rows written before `status` existed are still resumable games.
+export function gameStatus(game: { status?: GameStatus | null }): GameStatus {
+  return game.status === "finished" ? "finished" : "in-progress";
+}
 
 // Compared inside the write that flips `synced`, so a game edited while its
 // upload was in flight is left pending instead of being marked sent.
@@ -121,6 +131,7 @@ export interface LocalStore {
   open(): Promise<IDBDatabase>;
   saveGame(game: GameRecord): Promise<StoredGame>;
   loadGame(id: string): Promise<StoredGame | null>;
+  listGames(): Promise<StoredGame[]>;
   pendingGames(): Promise<StoredGame[]>;
   markGameSynced(id: string, expected?: StoredGame): Promise<boolean>;
   markGamePending(id: string): Promise<boolean>;
@@ -206,7 +217,17 @@ export function createLocalStore({
     open: database,
 
     saveGame(game: GameRecord) {
-      const record = { ...game, synced: false };
+      const record: StoredGame = {
+        id: game.id,
+        team_id: game.team_id,
+        date: game.date,
+        opponent_name: game.opponent_name,
+        created_at: game.created_at,
+        status: game.status === "finished" ? "finished" : "in-progress",
+        final_score_for: game.final_score_for ?? null,
+        final_score_against: game.final_score_against ?? null,
+        synced: false,
+      };
       return write(GAMES, async (store) => {
         await onDone(store.put(record));
         return record;
@@ -215,6 +236,12 @@ export function createLocalStore({
 
     loadGame(id: string) {
       return read(GAMES, (store) => readRecord<StoredGame>(store.get(id)));
+    },
+
+    listGames() {
+      return read(GAMES, (store) =>
+        readRecords<StoredGame>()(store.getAll()).then((games) => games.sort(byNewestGame)),
+      );
     },
 
     pendingGames() {

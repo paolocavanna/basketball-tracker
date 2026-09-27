@@ -29,12 +29,16 @@ export interface TeamRecord {
   slug: string;
 }
 
+export type GameStatus = "in-progress" | "finished";
+
 export interface GameRecord {
   id: string;
   team_id: number;
   date: string;
   opponent_name: string;
   created_at: string;
+  // Missing on rows saved before the field existed. Readers treat that as in-progress.
+  status?: GameStatus;
   final_score_for?: number | null;
   final_score_against?: number | null;
 }

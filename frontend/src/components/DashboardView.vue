@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import text from "../text/en.json";
+import RecentGames from "./RecentGames.vue";
+import type { LocalStore } from "../lib/localStore.ts";
 import { SEEDED_TEAM_ID, loadTeamId } from "../lib/team.ts";
 import { readGameDetail, readSeasonSummary } from "../lib/api.ts";
 import {
@@ -13,7 +15,9 @@ import {
 } from "../lib/trends.ts";
 import type { GameDetail, SeasonGame } from "../../../types.ts";
 
-defineEmits<{ navigate: [path: string] }>();
+defineProps<{ store: LocalStore }>();
+
+const emit = defineEmits<{ navigate: [path: string] }>();
 
 interface Possession {
   points: number;
@@ -140,11 +144,11 @@ function possessionTitle(index: number, possession: Possession): string {
 
 <template>
   <main class="dashboard">
-    <a class="dashboard-home" href="/" @click.prevent="$emit('navigate', '/')"
+    <a class="dashboard-home" href="/" @click.prevent="emit('navigate', '/')"
       >{{ text.dashboard.backToTracker }} <span aria-hidden="true">↗</span></a
     >
     <header class="dashboard-header">
-      <a href="/" class="logo-wrapper" @click.prevent="$emit('navigate', '/')">
+      <a href="/" class="logo-wrapper" @click.prevent="emit('navigate', '/')">
         <img
           class="club-mark club-mark-small"
           src="/campus-monferrato.png"
@@ -156,6 +160,8 @@ function possessionTitle(index: number, possession: Possession): string {
         <h1>{{ text.dashboard.title }}</h1>
       </div>
     </header>
+
+    <RecentGames :store="store" @navigate="emit('navigate', $event)" />
 
     <p v-if="loading" class="dashboard-message">{{ text.dashboard.loadingSeason }}</p>
     <p v-else-if="seasonError" class="dashboard-message dashboard-error" role="alert">
