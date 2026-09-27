@@ -126,21 +126,19 @@ function possessionTitle(index, possession) {
 
 <template>
   <main class="dashboard">
+    <a class="dashboard-home" href="/" @click.prevent="$emit('navigate', '/')"
+      >{{ text.dashboard.backToTracker }} <span aria-hidden="true">↗</span></a
+    >
     <header class="dashboard-header">
       <img
-        class="club-mark"
+        class="club-mark club-mark--small"
         src="/campus-monferrato.png"
         :alt="text.dashboard.logoAlt"
-        width="48"
-        height="48"
       />
       <div class="dashboard-heading">
         <p class="eyebrow">{{ text.brand.short }}</p>
         <h1>{{ text.dashboard.title }}</h1>
       </div>
-      <a class="dashboard-home" href="/" @click.prevent="$emit('navigate', '/')"
-        >{{ text.dashboard.backToTracker }} <span aria-hidden="true">↗</span></a
-      >
     </header>
 
     <p v-if="loading" class="dashboard-message">{{ text.dashboard.loadingSeason }}</p>

@@ -142,7 +142,7 @@ watch(
   <section v-else class="bench">
     <header class="top">
       <img class="club-mark" src="/campus-monferrato.png" :alt="text.brand.team" />
-      <p class="opponent">{{ game?.opponent_name || text.tracker.live }}</p>
+      <p class="opponent">vs {{ game?.opponent_name || text.tracker.live }}</p>
       <p
         class="sync-pill"
         :class="{ 'sync-pill-pending': pending && !notice, 'sync-pill-alert': notice }"
