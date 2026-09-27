@@ -1,0 +1,10 @@
+**/node_modules
+frontend/dist
+.wrangler
+.tokensave
+**/.vscode
+**/package-lock.json
+auth
+auth-wal
+*.png
+*.svg

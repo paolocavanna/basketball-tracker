@@ -1,0 +1,6 @@
+# Pages serves the Vite build. File-based Functions live in /functions.
+name = "basketball-tracker"
+pages_build_output_dir = "./frontend/dist"
+compatibility_date = "2026-09-26"
+# @libsql/client needs Node.js built-ins in the Pages Functions runtime.
+compatibility_flags = ["nodejs_compat"]

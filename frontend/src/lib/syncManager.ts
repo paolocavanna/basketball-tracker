@@ -1,0 +1,327 @@
+// Background sync. A bench tap writes locally and then calls kick(), which
+// returns immediately. This module never reads or writes the fields the live
+// tally is computed from; after the server accepts a row it only flips `synced`.
+//
+// One pass runs at a time. A second trigger that arrives mid-pass is remembered
+// and, when this pass succeeded, folded into a single follow-up so events saved
+// during the request are not left behind and are not uploaded twice at once.
+// A failed pass clears that follow-up. It does not schedule its own retry.
+// The next online event, idle callback, or 10s tick is what tries again.
+// Uploads are idempotent: a later pass may resend the same client ids.
+// A 404 on a batch means the server has lost that game, so it goes back in the
+// queue and the next pass recreates it before retrying the events.
+
+const INTERVAL_MS = 10_000;
+const JSON_HEADERS = { "Content-Type": "application/json" };
+
+function apiGame(game: StoredGame): PutGameRequest {
+  const body: PutGameRequest = {
+    id: game.id,
+    team_id: game.team_id,
+    date: game.date,
+    opponent: game.opponent_name,
+    created_at: game.created_at,
+  };
+  if (game.final_score_for != null) body.final_score_for = game.final_score_for;
+  if (game.final_score_against != null) body.final_score_against = game.final_score_against;
+  return body;
+}
+
+function apiEvent(event: StoredEvent): Omit<EventRecord, "game_id"> {
+  if (event.type === "SCORE") {
+    return {
+      id: event.id,
+      type: event.type,
+      points: event.points,
+      created_at: event.created_at,
+    };
+  }
+  return {
+    id: event.id,
+    type: event.type,
+    points: 0,
+    created_at: event.created_at,
+  };
+}
+
+function accepted(response: Response | null): boolean {
+  return Boolean(response && response.ok);
+}
+
+type TimerHandle = unknown;
+type ScheduleTimer = (callback: () => void, delay: number) => TimerHandle;
+type CancelTimer = (handle: unknown) => void;
+type IdleCallback = (callback: () => void) => TimerHandle;
+
+export interface SyncManager {
+  start(): void;
+  stop(): void;
+  kick(): void;
+  syncNow(): Promise<{ ok: boolean }>;
+  settled(): Promise<{ ok: boolean }>;
+}
+
+export interface SyncManagerOptions {
+  store: LocalStore;
+  fetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+  target?: Pick<EventTarget, "addEventListener" | "removeEventListener">;
+  intervalMs?: number;
+  onSettled?: () => void;
+  setTimeout?: ScheduleTimer;
+  clearTimeout?: CancelTimer;
+  setInterval?: ScheduleTimer;
+  clearInterval?: CancelTimer;
+  requestIdleCallback?: IdleCallback;
+  cancelIdleCallback?: CancelTimer;
+}
+
+export function createSyncManager({
+  store,
+  fetch: fetchImpl = globalThis.fetch,
+  target = globalThis,
+  intervalMs = INTERVAL_MS,
+  onSettled,
+  setTimeout: scheduleTimeout = globalThis.setTimeout,
+  clearTimeout: cancelTimeout = (handle) =>
+    globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>),
+  setInterval: scheduleInterval = globalThis.setInterval,
+  clearInterval: cancelInterval = (handle) =>
+    globalThis.clearInterval(handle as ReturnType<typeof globalThis.setInterval>),
+  ...timers
+}: SyncManagerOptions): SyncManager {
+  // `in` so a test can force the Safari fallback by passing undefined,
+  // rather than inheriting a requestIdleCallback from the environment.
+  const idleGlobals = globalThis as typeof globalThis & {
+    requestIdleCallback?: IdleCallback;
+    cancelIdleCallback?: CancelTimer;
+  };
+  const requestIdle =
+    "requestIdleCallback" in timers ? timers.requestIdleCallback : idleGlobals.requestIdleCallback;
+  const cancelIdle =
+    "cancelIdleCallback" in timers ? timers.cancelIdleCallback : idleGlobals.cancelIdleCallback;
+
+  let started = false;
+  let stopped = false;
+  let running = false;
+  let rerun = false;
+  let inflight: Promise<{ ok: boolean }> | null = null;
+  let intervalId: TimerHandle | null = null;
+  let idleHandle: TimerHandle | null = null;
+  let idleMode: "ric" | "timeout" | null = null;
+
+  function scheduleIdle() {
+    if (stopped || idleHandle != null) return;
+    const run = (): void => {
+      idleHandle = null;
+      idleMode = null;
+      if (!stopped) void syncNow();
+    };
+    if (typeof requestIdle === "function") {
+      idleMode = "ric";
+      idleHandle = requestIdle(run);
+      return;
+    }
+    // Safari has no requestIdleCallback. A timer still gets the work off the
+    // tap turn, which is the property the live tracker needs.
+    idleMode = "timeout";
+    idleHandle = scheduleTimeout(run, 0);
+  }
+
+  function clearIdle() {
+    if (idleHandle == null) return;
+    if (idleMode === "ric") cancelIdle?.(idleHandle);
+    else cancelTimeout(idleHandle);
+    idleHandle = null;
+    idleMode = null;
+  }
+
+  // A rejected fetch and a 500 are both just a failed request for the pass, so
+  // send hands back the response and lets each caller judge it. The caller that
+  // needs to know why asks for the status.
+  async function send(url: string, options: RequestInit): Promise<Response | null> {
+    try {
+      return await fetchImpl(url, options);
+    } catch {
+      return null;
+    }
+  }
+
+  async function syncGames(): Promise<boolean> {
+    let ok = true;
+    const games = await store.pendingGames();
+    for (const game of games) {
+      const sent = await send(`/api/games/${encodeURIComponent(game.id)}`, {
+        method: "PUT",
+        headers: JSON_HEADERS,
+        body: JSON.stringify(apiGame(game)),
+      });
+      if (!accepted(sent)) {
+        ok = false;
+        continue;
+      }
+      const marked = await store.markGameSynced(game.id, game);
+      if (!marked) ok = false;
+    }
+    return ok;
+  }
+
+  async function syncEventBatches(): Promise<boolean> {
+    let ok = true;
+    const events = await store.pendingEvents();
+    const groups = new Map<string, StoredEvent[]>();
+    for (const event of events) {
+      const batch = groups.get(event.game_id);
+      if (batch) batch.push(event);
+      else groups.set(event.game_id, [event]);
+    }
+
+    for (const [gameId, batch] of groups) {
+      const game = await store.loadGame(gameId);
+      // The sync route rejects events for a game the server has not stored yet.
+      if (!game || !game.synced) {
+        ok = false;
+        continue;
+      }
+      const current = await store.loadGameEvents(gameId);
+      const stillLive = new Set(current.filter((event) => !event.deleted).map((event) => event.id));
+      const liveBatch = batch.filter((event) => stillLive.has(event.id));
+      if (liveBatch.length === 0) continue;
+
+      const sent = await send(`/api/games/${encodeURIComponent(gameId)}/events/sync`, {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify(liveBatch.map(apiEvent)),
+      });
+      if (!accepted(sent)) {
+        // A 404 means this device's `synced` flag has outlived the row, so the
+        // batch can never land while the game is trusted. The game goes back in
+        // the queue and the next pass PUTs it before retrying the events. Any
+        // other failure is a transient one and leaves the game alone.
+        if (sent?.status === 404) await store.markGamePending(gameId);
+        ok = false;
+        continue;
+      }
+      // Re-reads the rows inside the store. Anything undone while this POST was
+      // in flight, including by another tab that already marked its tombstone
+      // synced, is queued for DELETE again. The POST can recreate a row whose
+      // DELETE already reached the server.
+      await store.settlePostedEvents(liveBatch.map((event) => event.id));
+    }
+    return ok;
+  }
+
+  // One request per undone event: the API has no batch delete. A tombstone
+  // that never reached the server still gets a DELETE, and that call is a
+  // no-op there, which covers an undo that landed while the POST was in flight.
+  // `forcedDeleteIds` covers the case where that DELETE already succeeded and
+  // another tab marked the tombstone synced before this POST reinserted the row.
+  async function syncDeletions(): Promise<boolean> {
+    let ok = true;
+    const [deletions, forced] = await Promise.all([
+      store.pendingDeletions(),
+      store.forcedDeleteIds(),
+    ]);
+    const ids = [...new Set([...deletions.map((event) => event.id), ...forced])];
+    for (const id of ids) {
+      const sent = await send(`/api/events/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      if (!accepted(sent)) {
+        ok = false;
+        continue;
+      }
+      await store.markDeletionsSynced([id]);
+      await store.clearForcedDeletes([id]);
+    }
+    return ok;
+  }
+
+  async function runPass(): Promise<boolean> {
+    const gamesOk = await syncGames();
+    const eventsOk = await syncEventBatches();
+    const deletionsOk = await syncDeletions();
+    return gamesOk && eventsOk && deletionsOk;
+  }
+
+  async function execute(): Promise<{ ok: boolean }> {
+    try {
+      for (;;) {
+        rerun = false;
+        if (stopped) return { ok: false };
+        const ok = await runPass();
+        if (!ok || stopped || !rerun) {
+          rerun = false;
+          return { ok: Boolean(ok) && !stopped };
+        }
+      }
+    } catch {
+      rerun = false;
+      return { ok: false };
+    }
+  }
+
+  function syncNow(): Promise<{ ok: boolean }> {
+    if (stopped) return Promise.resolve({ ok: false });
+    if (running) {
+      rerun = true;
+      return inflight ?? Promise.resolve({ ok: false });
+    }
+    running = true;
+    inflight = execute().finally(() => {
+      running = false;
+      inflight = null;
+      // The hook is how the bench refreshes its dot. It must not change the
+      // pass result, and it must not be awaited: a thrown or async listener
+      // would either fail the sync or hold the single-flight lock.
+      try {
+        onSettled?.();
+      } catch {
+        // Status is advisory. The log is already in the state this pass left it.
+      }
+    });
+    return inflight;
+  }
+
+  function onOnline(): void {
+    void syncNow();
+  }
+
+  function kick(): void {
+    if (stopped) return;
+    if (running) {
+      rerun = true;
+      return;
+    }
+    scheduleIdle();
+  }
+
+  function start(): void {
+    if (started) return;
+    started = true;
+    stopped = false;
+    target.addEventListener("online", onOnline);
+    intervalId = scheduleInterval(() => {
+      void syncNow();
+    }, intervalMs);
+    scheduleIdle();
+  }
+
+  function stop(): void {
+    stopped = true;
+    if (started) target.removeEventListener("online", onOnline);
+    started = false;
+    if (intervalId != null) {
+      cancelInterval(intervalId);
+      intervalId = null;
+    }
+    clearIdle();
+  }
+
+  function settled(): Promise<{ ok: boolean }> {
+    return inflight ?? Promise.resolve({ ok: true });
+  }
+
+  return { start, stop, kick, syncNow, settled };
+}
+import type { EventRecord, PutGameRequest, StoredEvent, StoredGame } from "../../../types.ts";
+import type { LocalStore } from "./localStore.ts";

@@ -1,296 +1,1232 @@
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  --color-primary: #0b0e37;
+  --color-secondary: #c72027;
+  --color-accent: #cca059;
+  --color-on-primary: #fff;
+  --color-on-accent: var(--color-primary);
+  --color-surface: color-mix(in srgb, var(--color-on-primary) 92%, var(--color-accent));
+  --color-muted: color-mix(in srgb, var(--color-on-primary) 72%, transparent);
+  --color-faint: color-mix(in srgb, var(--color-on-primary) 12%, transparent);
+  --color-synced: color-mix(in srgb, var(--color-on-primary) 55%, transparent);
+  --font: system-ui, "Segoe UI", roboto, sans-serif;
+  --space: 12px;
+  --gap: 10px;
+  --gap-loose: 14px;
+  --radius: 14px;
+  --tap-min: 44px;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
-
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
+  color-scheme: dark;
+  font: 18px/1.3 var(--font);
+  color: var(--color-on-primary);
+  background: var(--color-primary);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
+html {
+  height: 100svh;
+  overscroll-behavior: none;
 }
 
 body {
   margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--color-primary);
+  overscroll-behavior: none;
+}
+
+#app {
+  height: 100%;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
 h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
 p {
   margin: 0;
 }
 
-code,
-.counter {
-  font-family: var(--mono);
+a {
+  text-decoration: none;
+}
+
+.club-mark {
+  display: block;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.bench {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  height: 100%;
+  max-width: 720px;
+  margin-inline: auto;
+  padding: max(8px, env(safe-area-inset-top)) var(--space) max(10px, env(safe-area-inset-bottom));
+  overflow: hidden;
+}
+
+.bench-message {
+  gap: var(--space);
+  overflow: auto;
+}
+
+.bench-message h1 {
+  font-size: 1.5rem;
+  line-height: 1.2;
+}
+
+.bench-message p {
+  color: var(--color-muted);
+}
+
+.top {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--gap);
+  align-items: center;
+  min-height: var(--tap-min);
+}
+
+/* The badge is a navy disc, so on the navy bench it needs a faint rim to keep
+   its edge readable. */
+.bench .club-mark {
+  margin: 2rem auto;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-on-primary) 20%, transparent);
+}
+
+/* The start screen uses the large badge. On the live header the same image
+   stays a small mark, otherwise it pushes Undo and End game over the stats. */
+.bench .top .club-mark {
+  width: 36px;
+  height: 36px;
+  margin: 0;
+}
+
+.opponent {
+  overflow: hidden;
+  font-size: 1rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sync-pill {
   display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
-}
-
-.counter {
-  font-size: 16px;
+  align-items: center;
+  gap: 6px;
   padding: 5px 10px;
-  border-radius: 5px;
-  color: var(--accent);
-  background: var(--accent-bg);
-  border: 2px solid transparent;
-  transition: border-color 0.3s;
-  margin-bottom: 24px;
-
-  &:hover {
-    border-color: var(--accent-border);
-  }
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
+  border: 1px solid var(--color-faint);
+  border-radius: 999px;
+  color: var(--color-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
-.hero {
-  position: relative;
-
-  .base,
-  .framework,
-  .vite {
-    inset-inline: 0;
-    margin: 0 auto;
-  }
-
-  .base {
-    width: 170px;
-    position: relative;
-    z-index: 0;
-  }
-
-  .framework,
-  .vite {
-    position: absolute;
-  }
-
-  .framework {
-    z-index: 1;
-    top: 34px;
-    height: 28px;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(44deg) rotateY(39deg)
-      scale(1.4);
-  }
-
-  .vite {
-    z-index: 0;
-    top: 107px;
-    height: 26px;
-    width: auto;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg)
-      scale(0.8);
-  }
+.sync-pill-pending {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  color: var(--color-accent);
 }
 
-#app {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
+.sync-pill-alert {
+  border-color: var(--color-secondary);
+  background: var(--color-secondary);
+  color: var(--color-on-primary);
+}
+
+.sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentcolor;
+}
+
+.scoreboard {
+  display: flex;
+  flex: 0 1 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 0;
+}
+
+.score {
+  font-size: clamp(2.75rem, 14vw, 4.25rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 0.95;
+}
+
+.score-label {
+  color: var(--color-accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.tally {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  padding: 8px 0;
+  border-block: 1px solid var(--color-faint);
+}
+
+.stat {
   display: flex;
   flex-direction: column;
-  box-sizing: border-box;
+  align-items: center;
+  min-width: 0;
 }
 
-#center {
-  display: flex;
-  flex-direction: column;
-  gap: 25px;
-  place-content: center;
+.stat-value {
+  font-size: clamp(1.3rem, 5.5vw, 1.9rem);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.stat-label {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Two columns keeps all six targets inside the thumb arc on a phone held in
+   one hand. Rows stretch to fill whatever height is left over. Undo and End
+   game sit under the last row, and the 56px floor keeps every stat target
+   well over the 44px minimum. */
+.actions {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(56px, 1fr);
+  gap: var(--gap);
+  min-height: 0;
+}
+
+.action,
+.undo,
+.end-game,
+.start {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  border: 0;
+  border-radius: var(--radius);
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.action {
+  display: grid;
+  padding: 8px;
   place-items: center;
-  flex-grow: 1;
-
-  @media (max-width: 1024px) {
-    padding: 32px 20px 24px;
-    gap: 18px;
-  }
+  line-height: 1.1;
 }
 
-#next-steps {
+.action-score {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.action-empty,
+.action-rebound {
+  background: var(--color-surface);
+  color: var(--color-on-accent);
+}
+
+.action-turnover {
+  background: var(--color-secondary);
+  color: var(--color-on-primary);
+}
+
+.bench-footer {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--gap);
+  margin-top: 4px;
+}
+
+.undo,
+.end-game {
   display: flex;
-  border-top: 1px solid var(--border);
-  text-align: left;
-
-  & > div {
-    flex: 1 1 0;
-    padding: 32px;
-    @media (max-width: 1024px) {
-      padding: 24px 20px;
-    }
-  }
-
-  .icon {
-    margin-bottom: 16px;
-    width: 22px;
-    height: 22px;
-  }
-
-  @media (max-width: 1024px) {
-    flex-direction: column;
-    text-align: center;
-  }
-}
-
-#docs {
-  border-right: 1px solid var(--border);
-
-  @media (max-width: 1024px) {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-}
-
-#next-steps ul {
-  list-style: none;
-  padding: 0;
-  display: flex;
+  align-items: center;
+  justify-content: center;
   gap: 8px;
-  margin: 32px 0 0;
-
-  .logo {
-    height: 18px;
-  }
-
-  a {
-    color: var(--text-h);
-    font-size: 16px;
-    border-radius: 6px;
-    background: var(--social-bg);
-    display: flex;
-    padding: 6px 12px;
-    align-items: center;
-    gap: 8px;
-    text-decoration: none;
-    transition: box-shadow 0.3s;
-
-    &:hover {
-      box-shadow: var(--shadow);
-    }
-    .button-icon {
-      height: 18px;
-      width: 18px;
-    }
-  }
-
-  @media (max-width: 1024px) {
-    margin-top: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
-
-    li {
-      flex: 1 1 calc(50% - 8px);
-    }
-
-    a {
-      width: 100%;
-      justify-content: center;
-      box-sizing: border-box;
-    }
-  }
+  min-width: 0;
+  min-height: 52px;
+  padding-inline: 8px;
 }
 
-#spacer {
-  height: 88px;
-  border-top: 1px solid var(--border);
-  @media (max-width: 1024px) {
-    height: 48px;
-  }
+.undo {
+  border: 2px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  color: var(--color-accent);
+  font-size: 1.1rem;
 }
 
-.ticks {
-  position: relative;
+.end-game {
+  background: var(--color-secondary);
+  color: var(--color-on-primary);
+  font-size: 1.05rem;
+  white-space: nowrap;
+}
+
+.undo-caption,
+.undo-target {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.undo-target {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent) 24%, transparent);
+  font-size: 0.9rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.start {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.action:active,
+.undo:active,
+.end-game:active,
+.start:active {
+  filter: brightness(0.88);
+  transform: scale(0.985);
+}
+
+.action:disabled,
+.undo:disabled,
+.start:disabled {
+  cursor: default;
+  filter: none;
+  opacity: 0.45;
+  transform: none;
+}
+
+/* Inert, not broken: the Undo affordance stays visible from the first tap so it
+   is always discoverable, it just reads as unavailable. */
+.undo:disabled {
+  border-color: color-mix(in srgb, var(--color-on-primary) 20%, transparent);
+  background: transparent;
+  color: color-mix(in srgb, var(--color-on-primary) 45%, transparent);
+  opacity: 1;
+}
+
+.start-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+}
+
+.start-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.start-form input {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-on-accent);
+  color-scheme: light;
+  font-size: 1rem;
+}
+
+.form-error {
+  color: var(--color-secondary);
+  font-weight: 700;
+}
+
+.action:focus-visible,
+.undo:focus-visible,
+.end-game:focus-visible,
+.start:focus-visible {
+  outline: 3px solid var(--color-on-primary);
+  outline-offset: 2px;
+}
+
+/* Read-only season dashboard */
+.dashboard {
+  height: 100%;
+  overflow: auto;
+  padding: max(18px, env(safe-area-inset-top)) clamp(16px, 3vw, 44px)
+    max(24px, env(safe-area-inset-bottom));
+  background: var(--color-surface);
+  color: var(--color-primary);
+}
+
+.dashboard-header,
+.season-section,
+.game-section {
+  width: min(1440px, 100%);
+  margin-inline: auto;
+}
+
+.dashboard-header {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  padding-bottom: 22px;
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
+}
+
+.dashboard-heading {
+  flex: 1;
+}
+
+.eyebrow {
+  color: var(--color-secondary);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.dashboard-heading h1 {
+  font-size: clamp(1.35rem, 3vw, 2rem);
+  line-height: 1.1;
+}
+
+.dashboard-home {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 20%, transparent);
+  border-radius: 10px;
+  color: var(--color-primary);
+  font-size: 0.8rem;
+  font-weight: 750;
+  text-decoration: none;
+  white-space: nowrap;
+  margin-bottom: 10px;
+  float: right;
+}
+
+.dashboard-home span {
+  color: var(--color-secondary);
+}
+
+.dashboard-message {
+  width: min(1440px, 100%);
+  margin: 28px auto;
+  color: color-mix(in srgb, var(--color-primary) 70%, transparent);
+}
+
+.dashboard-error {
+  color: var(--color-secondary);
+}
+
+.detail-error {
+  margin: 0 0 12px;
+  color: var(--color-secondary);
+  font-weight: 700;
+}
+
+.logo-wrapper {
+  flex-basis: min-content;
+}
+
+.season-section {
+  padding-block: 24px 28px;
+}
+
+.section-title {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.section-title h2 {
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.section-title > span {
+  color: color-mix(in srgb, var(--color-primary) 60%, transparent);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.trend-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.trend-card,
+.game-list-panel,
+.game-detail,
+.possession-card {
+  border: 1px solid color-mix(in srgb, var(--color-primary) 13%, transparent);
+  border-radius: 14px;
+  background: var(--color-on-primary);
+  box-shadow: 0 5px 18px color-mix(in srgb, var(--color-primary) 5%, transparent);
+}
+
+.trend-card {
+  min-width: 0;
+  padding: 14px 16px 12px;
+}
+
+.trend-card-wide {
+  grid-column: 1 / -1;
+}
+
+.trend-heading {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.trend-heading h3 {
+  font-size: 0.88rem;
+}
+
+.trend-current {
+  color: var(--color-primary);
+  font-size: 1.1rem;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+}
+
+.trend-chart {
+  display: block;
   width: 100%;
+  height: 108px;
+  overflow: visible;
+  margin-top: 4px;
+}
 
-  &::before,
-  &::after {
-    content: '';
-    position: absolute;
-    top: -4.5px;
-    border: 5px solid transparent;
+.chart-gridline {
+  fill: none;
+  stroke: color-mix(in srgb, var(--color-primary) 10%, transparent);
+  stroke-width: 1;
+}
+
+.trend-line {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.trend-blue {
+  stroke: var(--color-primary);
+}
+
+.trend-red {
+  stroke: var(--color-secondary);
+}
+
+.trend-gold {
+  stroke: var(--color-accent);
+}
+
+.trend-dot {
+  stroke: var(--color-on-primary);
+  stroke-width: 2;
+}
+
+.trend-blue-fill {
+  fill: var(--color-primary);
+}
+
+.trend-red-fill {
+  fill: var(--color-secondary);
+}
+
+.trend-gold-fill {
+  fill: var(--color-accent);
+}
+
+.chart-caption {
+  display: flex;
+  justify-content: space-between;
+  color: color-mix(in srgb, var(--color-primary) 62%, transparent);
+  font-size: 0.63rem;
+}
+
+.legend,
+.possession-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: color-mix(in srgb, var(--color-primary) 65%, transparent);
+  font-size: 0.68rem;
+}
+
+.legend span,
+.possession-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend i,
+.possession-legend i {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+.legend-off {
+  background: var(--color-accent);
+}
+
+.legend-def {
+  background: var(--color-secondary);
+}
+
+.game-section {
+  display: grid;
+  grid-template-columns: minmax(230px, 290px) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+  padding-bottom: 30px;
+}
+
+.game-list-panel {
+  padding: 16px 12px;
+}
+
+.section-title-compact {
+  margin: 0 4px 12px;
+}
+
+.game-picker-label {
+  display: block;
+  margin: 0 4px 5px;
+  color: color-mix(in srgb, var(--color-primary) 60%, transparent);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.game-picker {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 8px;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 18%, transparent);
+  border-radius: 8px;
+  background: var(--color-on-primary);
+  color: var(--color-primary);
+}
+
+.game-list-item {
+  display: flex;
+  width: 100%;
+  min-height: 56px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 9px;
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--color-primary) 9%, transparent);
+  background: transparent;
+  color: var(--color-primary);
+  text-align: left;
+}
+
+.game-list-item-selected {
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-accent) 19%, transparent);
+}
+
+.game-list-item strong,
+.game-list-item small {
+  display: block;
+}
+
+.game-list-item strong {
+  font-size: 0.83rem;
+}
+
+.game-list-item small {
+  margin-top: 3px;
+  color: color-mix(in srgb, var(--color-primary) 56%, transparent);
+  font-size: 0.68rem;
+}
+
+.game-list-ppp {
+  font-size: 0.95rem;
+  font-weight: 850;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.game-list-ppp small {
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+}
+
+.game-detail {
+  min-width: 0;
+  padding: clamp(14px, 2vw, 24px);
+}
+
+.game-detail-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 16px;
+}
+
+.game-detail-title h2 {
+  font-size: clamp(1.2rem, 2.6vw, 1.8rem);
+}
+
+.final-score {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  font-size: 1.4rem;
+  font-weight: 850;
+}
+
+.final-score span {
+  color: color-mix(in srgb, var(--color-primary) 45%, transparent);
+}
+
+.game-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.game-stat-grid > div {
+  min-width: 0;
+  padding: 11px 9px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--color-primary) 5%, transparent);
+}
+
+.game-stat-grid strong,
+.game-stat-grid span {
+  display: block;
+}
+
+.game-stat-grid strong {
+  font-size: clamp(1.05rem, 2vw, 1.5rem);
+  font-variant-numeric: tabular-nums;
+}
+
+.game-stat-grid strong i {
+  color: var(--color-accent);
+  font-style: normal;
+}
+
+.game-stat-grid span {
+  margin-top: 3px;
+  color: color-mix(in srgb, var(--color-primary) 62%, transparent);
+  font-size: 0.63rem;
+  font-weight: 700;
+}
+
+.possession-card {
+  padding: 14px 14px 10px;
+  box-shadow: none;
+}
+
+.possession-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.possession-heading h3 {
+  font-size: 0.95rem;
+}
+
+.possession-heading > span {
+  color: color-mix(in srgb, var(--color-primary) 65%, transparent);
+  font-size: 0.74rem;
+  font-weight: 750;
+}
+
+.possession-chart-scroll {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+
+.possession-chart {
+  display: block;
+  min-width: 100%;
+  height: 165px;
+}
+
+.possession-bar {
+  fill: color-mix(in srgb, var(--color-primary) 14%, transparent);
+}
+
+.possession-bar-score {
+  fill: var(--color-accent);
+}
+
+.possession-bar-turnover {
+  fill: var(--color-secondary);
+}
+
+.bar-value,
+.bar-label {
+  fill: color-mix(in srgb, var(--color-primary) 72%, transparent);
+  font-family: var(--font);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.bar-label {
+  font-size: 9px;
+}
+
+.possession-legend {
+  padding-top: 4px;
+}
+
+.legend-score {
+  background: var(--color-accent);
+}
+
+.legend-zero {
+  background: color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
+.chart-loading {
+  padding: 35px 0;
+  color: color-mix(in srgb, var(--color-primary) 60%, transparent);
+  font-size: 0.85rem;
+}
+
+.start-dashboard-link {
+  align-self: flex-start;
+  color: var(--color-accent);
+  display: inline-block;
+  margin-top: auto;
+}
+
+@media (width >= 900px) {
+  .trend-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  &::before {
-    left: 0;
-    border-left-color: var(--border);
+  .trend-card-wide {
+    grid-column: auto;
   }
-  &::after {
-    right: 0;
-    border-right-color: var(--border);
+
+  .season-section {
+    padding-block: 28px 34px;
   }
+
+  .game-section {
+    gap: 22px;
+  }
+
+  .game-picker {
+    display: none;
+  }
+}
+
+@media (width <= 680px) {
+  body:has(.dashboard) {
+    overflow: auto;
+  }
+
+  #app:has(.dashboard) {
+    height: auto;
+    min-height: 100%;
+  }
+
+  .dashboard {
+    height: auto;
+    min-height: 100svh;
+  }
+
+  .dashboard-header {
+    gap: 10px;
+  }
+
+  .club-mark {
+    width: 70%;
+    flex-basis: 40px;
+  }
+
+  .club-mark-small {
+    width: 50%;
+  }
+
+  .dashboard-home {
+    padding: 8px;
+    font-size: 0.68rem;
+  }
+
+  .trend-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .trend-card-wide {
+    grid-column: auto;
+  }
+
+  .game-section {
+    grid-template-columns: 1fr;
+  }
+
+  .game-list-panel {
+    padding: 12px;
+  }
+
+  .game-list-item {
+    display: none;
+  }
+
+  .game-detail {
+    padding: 14px 10px;
+  }
+
+  .game-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .game-stat-grid span {
+    font-size: 0.68rem;
+  }
+}
+
+/* Tablet and desktop: three columns keeps the buttons chunky without turning
+   the row height up. A tall window gives End game its own full-width row
+   under Undo, so the way out of the game is a bar rather than half a row. */
+@media (width >= 600px) {
+  .actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (height >= 640px) {
+  .bench-footer {
+    grid-template-columns: 1fr;
+  }
+
+  .end-game {
+    font-size: 1.2rem;
+  }
+}
+
+/* Landscape phone and any other short viewport: two rows of three, and a
+   shorter header, score and tally. The 44px floor still fits above Undo and
+   End game in a 320px-tall window, which is the shortest phone this screen
+   is aimed at. */
+@media (height <= 560px) {
+  .bench {
+    gap: 4px;
+    padding: max(4px, env(safe-area-inset-top)) var(--space) max(4px, env(safe-area-inset-bottom));
+  }
+
+  .top {
+    min-height: 0;
+  }
+
+  .bench .club-mark {
+    width: 28px;
+    height: 28px;
+  }
+
+  .bench .top .club-mark {
+    width: 28px;
+    height: 28px;
+    margin: 0;
+  }
+
+  .scoreboard {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 8px;
+    padding: 0;
+  }
+
+  .score {
+    font-size: 1.7rem;
+  }
+
+  .tally {
+    padding: 2px 0;
+  }
+
+  .stat-value {
+    font-size: 1rem;
+  }
+
+  .stat-label {
+    font-size: 0.65rem;
+    white-space: nowrap;
+  }
+
+  .actions {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-auto-rows: minmax(44px, 1fr);
+    gap: 6px;
+  }
+
+  .bench-footer {
+    gap: 6px;
+    margin-top: 0;
+  }
+
+  .action,
+  .undo,
+  .end-game {
+    font-size: 1rem;
+  }
+
+  .undo,
+  .end-game {
+    min-height: var(--tap-min);
+  }
+}
+
+.finished-flag {
+  margin: 0;
+  color: var(--color-accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.finish-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 20px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.finish-dialog::backdrop {
+  background: color-mix(in srgb, var(--color-primary) 72%, transparent);
+}
+
+.finish-dialog h2 {
+  margin: 0 0 8px;
+  font-size: 1.25rem;
+}
+
+.finish-dialog p {
+  color: var(--color-muted);
+}
+
+.finish-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap);
+  margin-top: 16px;
+}
+
+.finish-cancel,
+.finish-confirm,
+.summary-done,
+.recent-action {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  border-radius: var(--radius);
+  font-weight: 800;
+}
+
+.finish-cancel,
+.summary-done {
+  border: 2px solid color-mix(in srgb, var(--color-on-primary) 35%, transparent);
+  background: transparent;
+  color: var(--color-on-primary);
+}
+
+.finish-confirm {
+  border: 0;
+  background: var(--color-secondary);
+  color: var(--color-on-primary);
+}
+
+.finish-confirm:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.recent-games {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recent-games h2 {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.recent-games ul {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recent-games li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 12px;
+}
+
+.bench .recent-games li {
+  background: var(--color-faint);
+}
+
+.recent-copy {
+  min-width: 0;
+}
+
+.recent-opponent,
+.recent-meta,
+.recent-score {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-opponent {
+  font-weight: 800;
+}
+
+.recent-meta,
+.recent-score {
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.recent-continue {
+  border: 0;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.bench .recent-open {
+  border: 2px solid color-mix(in srgb, var(--color-on-primary) 35%, transparent);
+  background: transparent;
+  color: var(--color-on-primary);
+}
+
+.dashboard .recent-games {
+  margin-bottom: 22px;
+}
+
+.dashboard .recent-games h2,
+.dashboard .recent-opponent {
+  color: var(--color-primary);
+}
+
+.dashboard .recent-games li {
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--color-on-primary));
+}
+
+.dashboard .recent-meta,
+.dashboard .recent-score {
+  color: color-mix(in srgb, var(--color-primary) 68%, transparent);
+}
+
+.dashboard .recent-open {
+  border: 2px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+  background: transparent;
+  color: var(--color-primary);
+}
+
+.summary-score-form,
+.summary-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space);
+}
+
+.summary-score-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.summary-score-form input {
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-on-accent);
+  color-scheme: light;
+  font-size: 1rem;
+}
+
+.score-saved {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+
+.finish-cancel:focus-visible,
+.finish-confirm:focus-visible,
+.recent-action:focus-visible,
+.summary-done:focus-visible,
+.start-form input:focus-visible,
+.summary-score-form input:focus-visible {
+  outline: 3px solid var(--color-on-primary);
+  outline-offset: 2px;
+}
+
+.dashboard .recent-action:focus-visible {
+  outline-color: var(--color-primary);
 }
