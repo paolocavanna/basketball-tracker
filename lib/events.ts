@@ -1,6 +1,13 @@
+import type { Client } from "@libsql/client";
+import type { ApiEvent, EventSyncResult } from "../types.ts";
+
 // A repeated sync sends the same client id. Keep the original courtside row,
 // and reject a different payload so another game cannot reuse that id.
-export async function syncEvents(db, gameId, events) {
+export async function syncEvents(
+  db: Client,
+  gameId: string,
+  events: ApiEvent[],
+): Promise<EventSyncResult> {
   if (events.length === 0) return { synced: 0 };
 
   const tx = await db.transaction("write");
@@ -25,7 +32,7 @@ export async function syncEvents(db, gameId, events) {
         row.created_at === event.created_at;
       if (!same) {
         return {
-          status: 409,
+          status: 409 as const,
           error: `Event at index ${index} already exists with different data`,
         };
       }

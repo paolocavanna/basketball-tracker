@@ -13,9 +13,12 @@
 // this module in serve mode only.
 
 import { mkdir, readFile, readdir } from "node:fs/promises";
+import type { ServerResponse } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { closeDb, getDb } from "../../lib/db.js";
+import { closeDb, getDb } from "../../lib/db.ts";
+import type { Connect, Logger, Plugin, PreviewServer, ViteDevServer } from "vite";
+import type { DatabaseEnv, PagesContext } from "../../types.ts";
 
 const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 const functionsDir = join(repoRoot, "functions", "api");
@@ -33,7 +36,7 @@ const SKIPPED_HEADERS = new Set([
 ]);
 
 // The schema script has no statement delimiter other than a trailing semicolon.
-function schemaStatements(script) {
+function schemaStatements(script: string): string[] {
   const statements = [];
   let current = "";
   for (const line of script.split("\n")) {
@@ -47,12 +50,12 @@ function schemaStatements(script) {
   return statements;
 }
 
-function alreadyApplied(err) {
-  const message = String(err?.message ?? err);
+function alreadyApplied(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
   return message.includes("already exists") || message.includes("UNIQUE constraint failed");
 }
 
-async function applySchema(env) {
+async function applySchema(env: DatabaseEnv): Promise<void> {
   const db = getDb(env);
   try {
     for (const statement of schemaStatements(await readFile(schemaPath, "utf8"))) {
@@ -71,24 +74,38 @@ async function applySchema(env) {
 
 // Pages maps the file tree onto routes: games/index.js serves /api/games, and
 // games/[id]/events/sync.js serves /api/games/:id/events/sync.
-async function collectRoutes(dir, prefix = "/api") {
-  const routes = [];
+interface LocalRoute {
+  method: string;
+  pattern: string;
+  segments: string[];
+  handler: (context: PagesContext) => Promise<Response>;
+}
+
+function isPageHandler(value: unknown): value is LocalRoute["handler"] {
+  // File-based route discovery only reads exported onRequest handlers from the
+  // Pages Functions tree, whose source files share the PagesContext contract.
+  return typeof value === "function";
+}
+
+async function collectRoutes(dir: string, prefix = "/api"): Promise<LocalRoute[]> {
+  const routes: LocalRoute[] = [];
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const file = join(dir, entry.name);
     if (entry.isDirectory()) {
       routes.push(...(await collectRoutes(file, `${prefix}/${entry.name}`)));
       continue;
     }
-    if (!entry.name.endsWith(".js")) continue;
+    if (!entry.name.endsWith(".ts")) continue;
 
     const name = entry.name.slice(0, -3);
     const pattern = name === "index" ? prefix : `${prefix}/${name}`;
-    const module = await import(pathToFileURL(file).href);
-    for (const [exportName, handler] of Object.entries(module)) {
+    const imported: unknown = await import(pathToFileURL(file).href);
+    if (imported === null || typeof imported !== "object") continue;
+    for (const [exportName, handler] of Object.entries(imported)) {
       // onRequestGet, onRequestPost, and so on. A bare onRequest would be the
       // catch-all Pages export, which this app does not use.
       const verb = /^onRequest([A-Za-z]+)$/.exec(exportName)?.[1];
-      if (!verb || typeof handler !== "function") continue;
+      if (!verb || !isPageHandler(handler)) continue;
       routes.push({
         method: verb.toUpperCase(),
         pattern,
@@ -103,12 +120,16 @@ async function collectRoutes(dir, prefix = "/api") {
 // One path can carry several routes, games/[id].js for instance. A caller that
 // asked for a verb this path does not export still needs to be told so, which
 // is what the path-only match left behind is for.
-function matchRoute(routes, pathname, method) {
+function matchRoute(
+  routes: LocalRoute[],
+  pathname: string,
+  method: string | undefined,
+): { route: LocalRoute; params: Record<string, string> } | null {
   const parts = pathname.split("/").filter(Boolean);
   let pathOnly = null;
   for (const route of routes) {
     if (route.segments.length !== parts.length) continue;
-    const params = {};
+    const params: Record<string, string> = {};
     const matched = route.segments.every((segment, index) => {
       if (segment.startsWith("[") && segment.endsWith("]")) {
         params[segment.slice(1, -1)] = decodeURIComponent(parts[index]);
@@ -123,23 +144,26 @@ function matchRoute(routes, pathname, method) {
   return pathOnly;
 }
 
-async function toRequest(req, url) {
+async function toRequest(req: Connect.IncomingMessage, url: URL): Promise<Request> {
   const headers = new Headers();
   for (const [key, value] of Object.entries(req.headers)) {
     if (SKIPPED_HEADERS.has(key) || value === undefined) continue;
     headers.set(key, Array.isArray(value) ? value.join(", ") : String(value));
   }
 
-  const init = { method: req.method, headers };
+  const init: RequestInit = { headers };
+  if (req.method) init.method = req.method;
   if (req.method !== "GET" && req.method !== "HEAD") {
-    const chunks = [];
-    for await (const chunk of req) chunks.push(chunk);
-    if (chunks.length > 0) init.body = Buffer.concat(chunks);
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+      chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : Buffer.from(chunk));
+    }
+    if (chunks.length > 0) init.body = Buffer.concat(chunks).toString("utf8");
   }
   return new Request(url, init);
 }
 
-function sendJson(res, status, body) {
+function sendJson(res: ServerResponse, status: number, body: unknown): void {
   const payload = Buffer.from(JSON.stringify(body));
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json");
@@ -147,7 +171,7 @@ function sendJson(res, status, body) {
   res.end(payload);
 }
 
-async function sendResponse(res, response) {
+async function sendResponse(res: ServerResponse, response: Response): Promise<void> {
   res.statusCode = response.status;
   response.headers.forEach((value, key) => res.setHeader(key, value));
   if (response.status === 204) {
@@ -157,7 +181,11 @@ async function sendResponse(res, response) {
   res.end(Buffer.from(await response.arrayBuffer()));
 }
 
-function createMiddleware(routes, env, log) {
+function createMiddleware(
+  routes: LocalRoute[],
+  env: DatabaseEnv,
+  log: Logger,
+): Connect.NextHandleFunction {
   return async function localApi(req, res, next) {
     const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
     if (!url.pathname.startsWith("/api/")) {
@@ -193,10 +221,13 @@ function createMiddleware(routes, env, log) {
   };
 }
 
-async function mount(server, mode) {
+async function mount(
+  server: ViteDevServer | PreviewServer,
+  mode: "dev" | "preview",
+): Promise<void> {
   const { logger } = server.config;
   await mkdir(dataDir, { recursive: true });
-  const env = { TURSO_DATABASE_URL: `file:${databasePath}` };
+  const env: DatabaseEnv = { TURSO_DATABASE_URL: `file:${databasePath}` };
   try {
     await applySchema(env);
   } catch (err) {
@@ -212,7 +243,7 @@ async function mount(server, mode) {
   );
 }
 
-export function localApi() {
+export function localApi(): Plugin {
   return {
     name: "local-pages-functions",
     configureServer(server) {

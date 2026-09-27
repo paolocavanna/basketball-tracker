@@ -7,31 +7,44 @@ import {
   formatPpp,
   isPending,
   mergeStoredEvents,
-} from "../frontend/src/lib/liveLog.js";
-import { createLocalStore } from "../frontend/src/lib/localStore.js";
-import { parseRoute, livePath } from "../frontend/src/lib/route.js";
-import { computeStats } from "../frontend/src/lib/stats.js";
-import { createSyncManager } from "../frontend/src/lib/syncManager.js";
-import { SEEDED_TEAM_ID, loadTeamId } from "../frontend/src/lib/team.js";
+} from "../frontend/src/lib/liveLog.ts";
+import { createLocalStore } from "../frontend/src/lib/localStore.ts";
+import { parseRoute, livePath } from "../frontend/src/lib/route.ts";
+import { computeStats } from "../frontend/src/lib/stats.ts";
+import { createSyncManager } from "../frontend/src/lib/syncManager.ts";
+import { SEEDED_TEAM_ID, loadTeamId } from "../frontend/src/lib/team.ts";
+import type { EventPayload, EventType, NewStoredEvent, StoredEvent, StoredGame } from "../types.ts";
 
 const GAME_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 
-function game(opponent = "Novi Ligure") {
+function game(opponent = "Novi Ligure"): StoredGame {
   return {
     id: GAME_ID,
     team_id: 1,
     date: "2026-10-04",
     opponent_name: opponent,
     created_at: "2026-10-04T18:00:00.000Z",
+    synced: false,
   };
 }
 
-function event(id, type, points, extras = {}) {
+function event(
+  id: string,
+  type: EventType,
+  points: number,
+  extras: Partial<Pick<StoredEvent, "synced" | "deleted" | "created_at">> = {},
+): StoredEvent {
+  let payload: EventPayload;
+  if (type === "SCORE") {
+    if (points !== 2 && points !== 3) throw new Error("Score points must be 2 or 3");
+    payload = { type, points };
+  } else {
+    payload = { type, points: 0 };
+  }
   return {
     id,
     game_id: GAME_ID,
-    type,
-    points,
+    ...payload,
     created_at: `2026-10-04T10:00:0${id}.000Z`,
     synced: false,
     deleted: false,
@@ -39,32 +52,50 @@ function event(id, type, points, extras = {}) {
   };
 }
 
+function materializeEvent(row: NewStoredEvent): StoredEvent {
+  let payload: EventPayload;
+  if (row.type === "SCORE") {
+    if (row.points !== 2 && row.points !== 3) throw new Error("Score points must be 2 or 3");
+    payload = { type: row.type, points: row.points };
+  } else {
+    payload = { type: row.type, points: 0 };
+  }
+  return {
+    ...payload,
+    id: row.id ?? "test-event",
+    game_id: row.game_id,
+    created_at: row.created_at ?? "2026-10-04T10:00:00.000Z",
+    synced: false,
+    deleted: false,
+  };
+}
+
 function deferred() {
-  let open;
-  const opened = new Promise((resolve) => {
+  let open!: () => void;
+  const opened = new Promise<void>((resolve) => {
     open = resolve;
   });
   return { opened, open };
 }
 
 function clock() {
-  const idle = [];
+  const idle: Array<{ fn: () => void }> = [];
   return {
     idle,
-    setInterval() {
+    setInterval(_fn: () => void) {
       return { fn() {} };
     },
-    clearInterval() {},
-    setTimeout(fn) {
+    clearInterval(_handle: unknown) {},
+    setTimeout(fn: () => void) {
       return { fn };
     },
-    clearTimeout() {},
-    requestIdleCallback(fn) {
+    clearTimeout(_handle: unknown) {},
+    requestIdleCallback(fn: () => void) {
       const handle = { fn };
       idle.push(handle);
       return handle;
     },
-    cancelIdleCallback() {},
+    cancelIdleCallback(_handle: unknown) {},
   };
 }
 
@@ -86,7 +117,10 @@ describe("live route", () => {
       }),
       SEEDED_TEAM_ID,
     );
-    assert.equal(await loadTeamId(async () => ({ ok: false })), SEEDED_TEAM_ID);
+    assert.equal(
+      await loadTeamId(async () => ({ ok: false, json: async () => null })),
+      SEEDED_TEAM_ID,
+    );
     assert.equal(
       await loadTeamId(async () => ({
         ok: true,
@@ -110,8 +144,8 @@ describe("bench log", () => {
     const gate = deferred();
     let kicks = 0;
     const store = {
-      saveEvent(row) {
-        return gate.opened.then(() => row);
+      saveEvent(row: NewStoredEvent) {
+        return gate.opened.then(() => materializeEvent(row));
       },
     };
     const result = commitTap({
@@ -122,8 +156,7 @@ describe("bench log", () => {
         },
       },
       gameId: GAME_ID,
-      type: "SCORE",
-      points: 2,
+      payload: { type: "SCORE", points: 2 },
       events: [],
       clock: { now: () => "2026-10-04T10:00:01.000Z", newId: () => "score-1" },
     });
@@ -147,21 +180,20 @@ describe("bench log", () => {
   });
 
   it("keeps every rapid tap in the tally while each write is still queued", async () => {
-    const pending = [];
+    const pending: Array<ReturnType<typeof deferred>> = [];
     const store = {
-      saveEvent(row) {
+      saveEvent(row: NewStoredEvent) {
         const gate = deferred();
         pending.push(gate);
-        return gate.opened.then(() => row);
+        return gate.opened.then(() => materializeEvent(row));
       },
     };
-    let events = [];
+    let events: StoredEvent[] = [];
     events = commitTap({
       store,
       sync: { kick() {} },
       gameId: GAME_ID,
-      type: "SCORE",
-      points: 2,
+      payload: { type: "SCORE", points: 2 },
       events,
       clock: { now: () => "2026-10-04T10:00:01.000Z", newId: () => "a" },
     }).events;
@@ -169,8 +201,7 @@ describe("bench log", () => {
       store,
       sync: { kick() {} },
       gameId: GAME_ID,
-      type: "SCORE",
-      points: 3,
+      payload: { type: "SCORE", points: 3 },
       events,
       clock: { now: () => "2026-10-04T10:00:02.000Z", newId: () => "b" },
     }).events;
@@ -185,7 +216,7 @@ describe("bench log", () => {
   });
 
   it("drops the latest tap immediately, including one that already synced", async () => {
-    const deleted = [];
+    const deleted: string[] = [];
     let kicks = 0;
     const events = [
       event("1", "SCORE", 2, { synced: true }),
@@ -195,7 +226,9 @@ describe("bench log", () => {
       store: {
         deleteEvent(id) {
           deleted.push(id);
-          return Promise.resolve(events[1]);
+          const undone = events[1];
+          assert.ok(undone);
+          return Promise.resolve(undone);
         },
       },
       sync: {
@@ -206,6 +239,7 @@ describe("bench log", () => {
       events,
     });
 
+    assert.ok(result.undone);
     assert.equal(result.undone.id, "2");
     assert.equal(result.events[1].deleted, true);
     assert.equal(computeStats(result.events).offensive_rebounds, 0);
@@ -232,8 +266,7 @@ describe("bench log", () => {
         },
       },
       gameId: GAME_ID,
-      type: "SCORE",
-      points: 2,
+      payload: { type: "SCORE", points: 2 },
       events: [],
       clock: { now: () => "2026-10-04T10:00:01.000Z", newId: () => "score-1" },
     });
@@ -250,10 +283,10 @@ describe("bench log", () => {
     let kicks = 0;
     const result = commitTap({
       store: {
-        saveEvent(row) {
+        saveEvent(row: NewStoredEvent) {
           attempts += 1;
           if (attempts === 1) return Promise.reject(new Error("aborted"));
-          return Promise.resolve(row);
+          return Promise.resolve(materializeEvent(row));
         },
       },
       sync: {
@@ -262,8 +295,7 @@ describe("bench log", () => {
         },
       },
       gameId: GAME_ID,
-      type: "TOV",
-      points: 0,
+      payload: { type: "TOV", points: 0 },
       events: [],
       clock: { now: () => "2026-10-04T10:00:01.000Z", newId: () => "tov-1" },
     });
@@ -326,9 +358,16 @@ describe("bench log", () => {
       merged.map((row) => row.id),
       ["b", "a"],
     );
-    assert.equal(merged.findLast((row) => !row.deleted).type, "TOV");
+    const last = merged.findLast((row) => !row.deleted);
+    assert.ok(last);
+    assert.equal(last.type, "TOV");
   });
 });
+
+function parseRequestBody(body: BodyInit | null | undefined): unknown {
+  if (typeof body !== "string") throw new Error("Expected a JSON request body");
+  return JSON.parse(body) as unknown;
+}
 
 describe("bench sync", { concurrency: false }, () => {
   it("updates the tally while a hung batch is outstanding and retries nothing on its own", async () => {
@@ -337,11 +376,11 @@ describe("bench sync", { concurrency: false }, () => {
     await store.markGameSynced(GAME_ID, game());
 
     const timers = clock();
-    let release = () => {};
-    const hung = new Promise((resolve) => {
+    let release!: () => void;
+    const hung = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const calls = [];
+    const calls: Array<{ url: string; method: string | undefined }> = [];
     let settled = 0;
     const sync = createSyncManager({
       store,
@@ -359,8 +398,7 @@ describe("bench sync", { concurrency: false }, () => {
       store,
       sync,
       gameId: GAME_ID,
-      type: "SCORE",
-      points: 2,
+      payload: { type: "SCORE", points: 2 },
       events: [],
     });
     assert.equal(computeStats(tapped.events).points, 2);
@@ -370,20 +408,23 @@ describe("bench sync", { concurrency: false }, () => {
     assert.equal(timers.idle.length, 1);
     assert.equal(calls.length, 0);
 
-    timers.idle[0].fn();
+    const firstIdle = timers.idle[0];
+    assert.ok(firstIdle);
+    firstIdle.fn();
     for (let attempt = 0; attempt < 20 && calls.length === 0; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
     assert.equal(calls.length, 1);
-    assert.equal(calls[0].method, "POST");
-    assert.equal(calls[0].url, `/api/games/${GAME_ID}/events/sync`);
+    const firstCall = calls[0];
+    assert.ok(firstCall);
+    assert.equal(firstCall.method, "POST");
+    assert.equal(firstCall.url, `/api/games/${GAME_ID}/events/sync`);
 
     const during = commitTap({
       store,
       sync,
       gameId: GAME_ID,
-      type: "TOV",
-      points: 0,
+      payload: { type: "TOV", points: 0 },
       events: tapped.events,
     });
     assert.equal(computeStats(during.events).turnovers, 1);
@@ -410,8 +451,9 @@ describe("bench sync", { concurrency: false }, () => {
     const sync = createSyncManager({
       store,
       fetch(_url, options = {}) {
-        const body = JSON.parse(options.body);
-        return Response.json({ synced: body.length });
+        const body = parseRequestBody(options.body);
+        if (!Array.isArray(body)) throw new Error("Expected an event batch");
+        return Promise.resolve(Response.json({ synced: body.length }));
       },
       ...timers,
     });
@@ -420,28 +462,32 @@ describe("bench sync", { concurrency: false }, () => {
       store,
       sync,
       gameId: GAME_ID,
-      type: "SCORE",
-      points: 3,
+      payload: { type: "SCORE", points: 3 },
       events: [],
     });
     await first.persisted;
-    timers.idle[0].fn();
+    const firstIdle = timers.idle[0];
+    assert.ok(firstIdle);
+    firstIdle.fn();
     await sync.settled();
 
     const second = commitTap({
       store,
       sync,
       gameId: GAME_ID,
-      type: "DEF_REB",
-      points: 0,
+      payload: { type: "DEF_REB", points: 0 },
       events: first.events,
     });
     const merged = mergeStoredEvents(second.events, await store.loadGameEvents(GAME_ID));
     const stats = computeStats(merged);
     assert.equal(stats.points, 3);
     assert.equal(stats.defensive_rebounds, 1);
-    assert.equal(merged.find((row) => row.type === "SCORE").synced, true);
-    assert.equal(merged.find((row) => row.type === "DEF_REB").synced, false);
+    const score = merged.find((row) => row.type === "SCORE");
+    const rebound = merged.find((row) => row.type === "DEF_REB");
+    assert.ok(score);
+    assert.ok(rebound);
+    assert.equal(score.synced, true);
+    assert.equal(rebound.synced, false);
     assert.equal(isPending({ synced: true }, merged), true);
   });
 });

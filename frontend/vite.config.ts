@@ -8,7 +8,7 @@ import { defineConfig } from "vite";
 export default defineConfig(async ({ command }) => {
   const plugins = [vue()];
   if (command === "serve") {
-    const { localApi } = await import("./dev/localApi.js");
+    const { localApi } = await import("./dev/localApi.ts");
     plugins.push(localApi());
   }
   return { plugins };

@@ -1,14 +1,15 @@
-<script setup>
+<script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
 import LiveTracker from "./components/LiveTracker.vue";
 import StartGame from "./components/StartGame.vue";
 import DashboardView from "./components/DashboardView.vue";
-import { createLocalStore } from "./lib/localStore.js";
-import { parseRoute } from "./lib/route.js";
-import { createSyncManager } from "./lib/syncManager.js";
+import { createLocalStore } from "./lib/localStore.ts";
+import { parseRoute } from "./lib/route.ts";
+import { createSyncManager } from "./lib/syncManager.ts";
+import type { AppRoute } from "./lib/route.ts";
 
 const store = createLocalStore();
-const route = ref(parseRoute(location.pathname));
+const route = ref<AppRoute>(parseRoute(location.pathname));
 const statusTick = ref(0);
 
 const sync = createSyncManager({
@@ -18,12 +19,12 @@ const sync = createSyncManager({
   },
 });
 
-function navigate(path) {
+function navigate(path: string): void {
   history.pushState(null, "", path);
   route.value = parseRoute(location.pathname);
 }
 
-function onPopState() {
+function onPopState(): void {
   route.value = parseRoute(location.pathname);
 }
 

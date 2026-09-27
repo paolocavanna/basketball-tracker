@@ -1,12 +1,14 @@
-export function json(body, status = 200) {
+export function json(body: unknown, status = 200): Response {
   return Response.json(body, { status });
 }
 
-export function error(status, message) {
+export function error(status: number, message: string): Response {
   return json({ error: message }, status);
 }
 
-export async function readJson(request) {
+export type JsonReadResult = { value: unknown } | { error: string };
+
+export async function readJson(request: Request): Promise<JsonReadResult> {
   let text;
   try {
     text = await request.text();
@@ -15,22 +17,23 @@ export async function readJson(request) {
   }
   if (text.trim() === "") return { error: "Expected a JSON body" };
   try {
-    return { value: JSON.parse(text) };
+    const value: unknown = JSON.parse(text);
+    return { value };
   } catch {
     return { error: "Expected a JSON body" };
   }
 }
 
-export function serverError(err) {
+export function serverError(err: unknown): Response {
   console.error(err);
   return error(500, "Internal server error");
 }
 
-export async function handle(fn) {
+export async function handle(fn: () => Promise<Response>): Promise<Response> {
   try {
     return await fn();
   } catch (err) {
-    const message = String(err?.message ?? err);
+    const message = err instanceof Error ? err.message : String(err);
     if (message.includes("CHECK constraint")) {
       return error(400, "Event violates the statistics rules");
     }

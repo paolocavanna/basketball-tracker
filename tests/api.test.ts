@@ -6,21 +6,25 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@libsql/client";
-import { closeDb, getDb } from "../lib/db.js";
-import { onRequestDelete } from "../functions/api/events/[id].js";
-import { onRequestGet as onRequestGameGet, onRequestPut } from "../functions/api/games/[id].js";
-import { onRequestGet as onRequestGamesGet } from "../functions/api/games/index.js";
-import { onRequestPost as onRequestSync } from "../functions/api/games/[id]/events/sync.js";
-import { onRequestGet as onRequestSeason } from "../functions/api/stats/season.js";
-import { onRequestGet as onRequestTeams } from "../functions/api/teams.js";
+import { closeDb, getDb } from "../lib/db.ts";
+import { onRequestDelete } from "../functions/api/events/[id].ts";
+import { onRequestGet as onRequestGameGet, onRequestPut } from "../functions/api/games/[id].ts";
+import { onRequestGet as onRequestGamesGet } from "../functions/api/games/index.ts";
+import { onRequestPost as onRequestSync } from "../functions/api/games/[id]/events/sync.ts";
+import { onRequestGet as onRequestSeason } from "../functions/api/stats/season.ts";
+import { onRequestGet as onRequestTeams } from "../functions/api/teams.ts";
+import type { DatabaseEnv, PagesContext } from "../types.ts";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
 describe("games and events API", { concurrency: false }, () => {
-  let env;
-  let dir;
+  let env!: DatabaseEnv;
+  let dir!: string;
 
-  async function call(handler, { url, params = {}, body }) {
+  async function call(
+    handler: (context: PagesContext) => Promise<Response>,
+    { url, params = {}, body }: { url: string; params?: Record<string, string>; body?: unknown },
+  ): Promise<{ status: number; body: unknown }> {
     const method =
       handler === onRequestPut
         ? "PUT"
@@ -41,7 +45,7 @@ describe("games and events API", { concurrency: false }, () => {
     const text = await response.text();
     return {
       status: response.status,
-      body: text ? JSON.parse(text) : null,
+      body: text ? (JSON.parse(text) as unknown) : null,
     };
   }
 
@@ -76,13 +80,13 @@ describe("games and events API", { concurrency: false }, () => {
     const objects = await db.execute(
       "SELECT name FROM sqlite_master WHERE type IN ('table', 'index')",
     );
-    const names = objects.rows.map((row) => row.name);
+    const names = objects.rows.map((row) => String(row.name));
     for (const name of ["teams", "games", "events", "idx_games_team_id", "idx_events_game_id"]) {
       assert.ok(names.includes(name), name);
     }
     const eventsSql = await db.execute("SELECT sql FROM sqlite_master WHERE name = 'events'");
-    assert.match(eventsSql.rows[0].sql, /ON DELETE CASCADE/);
-    assert.match(eventsSql.rows[0].sql, /CHECK/);
+    assert.match(String(eventsSql.rows[0].sql), /ON DELETE CASCADE/);
+    assert.match(String(eventsSql.rows[0].sql), /CHECK/);
   });
 
   it("rejects rows the statistics rules do not allow", async () => {
@@ -119,10 +123,10 @@ describe("games and events API", { concurrency: false }, () => {
     const id = crypto.randomUUID();
     const first = await putGame(id, { opponent: "Novi Ligure", final_score_for: 42 });
     assert.equal(first.status, 201);
-    assert.equal(first.body.opponent_name, "Novi Ligure");
-    assert.equal(first.body.final_score_for, 42);
-    assert.equal(first.body.team_id, 1);
-    assert.equal(first.body.created_at, "2026-10-04T18:00:00.000Z");
+    assert.equal(field(first.body, "opponent_name"), "Novi Ligure");
+    assert.equal(field(first.body, "final_score_for"), 42);
+    assert.equal(field(first.body, "team_id"), 1);
+    assert.equal(field(first.body, "created_at"), "2026-10-04T18:00:00.000Z");
 
     const second = await putGame(id, {
       opponent: "Someone else",
@@ -130,9 +134,9 @@ describe("games and events API", { concurrency: false }, () => {
       final_score_for: 10,
     });
     assert.equal(second.status, 200);
-    assert.equal(second.body.opponent_name, "Novi Ligure");
-    assert.equal(second.body.final_score_for, 42);
-    assert.equal(second.body.created_at, "2026-10-04T18:00:00.000Z");
+    assert.equal(field(second.body, "opponent_name"), "Novi Ligure");
+    assert.equal(field(second.body, "final_score_for"), 42);
+    assert.equal(field(second.body, "created_at"), "2026-10-04T18:00:00.000Z");
 
     const count = await getDb(env).execute("SELECT COUNT(*) AS n FROM games");
     assert.equal(Number(count.rows[0].n), 1);
@@ -145,7 +149,7 @@ describe("games and events API", { concurrency: false }, () => {
 
     const mismatch = await putGame(id, { id: crypto.randomUUID() });
     assert.equal(mismatch.status, 400);
-    assert.equal(mismatch.body.error, "id must match the URL");
+    assert.equal(field(mismatch.body, "error"), "id must match the URL");
   });
 
   it("lists and aggregates only the requested team", async () => {
@@ -173,21 +177,23 @@ describe("games and events API", { concurrency: false }, () => {
     });
     assert.equal(list.status, 200);
     assert.deepEqual(
-      list.body.map((game) => game.opponent_name),
+      arrayBody(list.body).map((game) => field(game, "opponent_name")),
       ["Novi"],
     );
-    assert.equal(list.body[0].stats.points, 2);
-    assert.equal(list.body[0].stats.possessions, 1);
+    const listedStats = objectField(arrayBody(list.body)[0], "stats");
+    assert.equal(field(listedStats, "points"), 2);
+    assert.equal(field(listedStats, "possessions"), 1);
 
     const season = await call(onRequestSeason, {
       url: "http://localhost/api/stats/season?team_id=1",
     });
     assert.equal(season.status, 200);
-    assert.equal(season.body.team_id, 1);
-    assert.equal(season.body.games.length, 1);
-    assert.equal(season.body.totals.points, 2);
-    assert.equal(season.body.totals.possessions, 1);
-    assert.equal(season.body.totals.points_per_possession, 2);
+    assert.equal(field(season.body, "team_id"), 1);
+    assert.equal(arrayField(season.body, "games").length, 1);
+    const seasonTotals = objectField(season.body, "totals");
+    assert.equal(field(seasonTotals, "points"), 2);
+    assert.equal(field(seasonTotals, "possessions"), 1);
+    assert.equal(field(seasonTotals, "points_per_possession"), 2);
   });
 
   it("counts possession-ending events and leaves rebounds out of the possession total", async () => {
@@ -204,7 +210,7 @@ describe("games and events API", { concurrency: false }, () => {
     ];
     const synced = await sync(id, events);
     assert.equal(synced.status, 200);
-    assert.equal(synced.body.synced, 7);
+    assert.equal(field(synced.body, "synced"), 7);
 
     const detail = await call(onRequestGameGet, {
       url: `http://localhost/api/games/${id}`,
@@ -212,10 +218,10 @@ describe("games and events API", { concurrency: false }, () => {
     });
     assert.equal(detail.status, 200);
     assert.deepEqual(
-      detail.body.events.map((event) => event.type),
+      arrayField(detail.body, "events").map((event) => field(event, "type")),
       ["SCORE", "OFF_REB", "SCORE", "EMPTY", "DEF_REB", "TOV", "OFF_REB"],
     );
-    assert.deepEqual(detail.body.stats, {
+    assert.deepEqual(objectField(detail.body, "stats"), {
       points: 5,
       possessions: 4,
       points_per_possession: 1.25,
@@ -236,7 +242,7 @@ describe("games and events API", { concurrency: false }, () => {
       url: `http://localhost/api/games/${id}`,
       params: { id },
     });
-    assert.deepEqual(detail.body.stats, {
+    assert.deepEqual(objectField(detail.body, "stats"), {
       points: 0,
       possessions: 0,
       points_per_possession: null,
@@ -257,7 +263,7 @@ describe("games and events API", { concurrency: false }, () => {
     const second = await sync(id, batch);
     assert.equal(first.status, 200);
     assert.equal(second.status, 200);
-    assert.equal(second.body.synced, 2);
+    assert.equal(field(second.body, "synced"), 2);
 
     const count = await getDb(env).execute({
       sql: "SELECT COUNT(*) AS n FROM events WHERE game_id = ?",
@@ -269,9 +275,10 @@ describe("games and events API", { concurrency: false }, () => {
       url: `http://localhost/api/games/${id}`,
       params: { id },
     });
-    assert.equal(detail.body.stats.possessions, 2);
-    assert.equal(detail.body.stats.points, 2);
-    assert.equal(detail.body.stats.turnovers, 1);
+    const detailStats = objectField(detail.body, "stats");
+    assert.equal(field(detailStats, "possessions"), 2);
+    assert.equal(field(detailStats, "points"), 2);
+    assert.equal(field(detailStats, "turnovers"), 1);
   });
 
   it("rejects an invalid event without writing the rest of the batch", async () => {
@@ -283,11 +290,11 @@ describe("games and events API", { concurrency: false }, () => {
       tap("EMPTY", 0, "2026-10-04T10:02:00.000Z"),
     ]);
     assert.equal(response.status, 400);
-    assert.match(response.body.error, /TOV points must be 0/);
+    assert.match(stringField(response.body, "error"), /TOV points must be 0/);
 
     const badScore = await sync(id, [tap("SCORE", 1, "2026-10-04T10:03:00.000Z")]);
     assert.equal(badScore.status, 400);
-    assert.match(badScore.body.error, /SCORE points must be 2 or 3/);
+    assert.match(stringField(badScore.body, "error"), /SCORE points must be 2 or 3/);
 
     const count = await getDb(env).execute("SELECT COUNT(*) AS n FROM events");
     assert.equal(Number(count.rows[0].n), 0);
@@ -307,8 +314,8 @@ describe("games and events API", { concurrency: false }, () => {
       url: `http://localhost/api/games/${id}`,
       params: { id },
     });
-    assert.equal(detail.body.events[0].points, 2);
-    assert.equal(detail.body.stats.points, 2);
+    assert.equal(field(arrayField(detail.body, "events")[0], "points"), 2);
+    assert.equal(field(objectField(detail.body, "stats"), "points"), 2);
   });
 
   it("removes an undone event from the statistics and treats a second delete as success", async () => {
@@ -335,7 +342,7 @@ describe("games and events API", { concurrency: false }, () => {
       url: `http://localhost/api/games/${id}`,
       params: { id },
     });
-    assert.deepEqual(detail.body.stats, {
+    assert.deepEqual(objectField(detail.body, "stats"), {
       points: 0,
       possessions: 0,
       points_per_possession: null,
@@ -369,23 +376,25 @@ describe("games and events API", { concurrency: false }, () => {
       url: "http://localhost/api/stats/season?team_id=1",
     });
     assert.deepEqual(
-      season.body.games.map((game) => game.opponent_name),
+      arrayField(season.body, "games").map((game) => field(game, "opponent_name")),
       ["Earlier", "Later"],
     );
-    assert.equal(season.body.games[0].points_per_possession, 2);
-    assert.equal(season.body.games[1].possessions, 3);
-    assert.equal(season.body.games[1].turnovers, 1);
-    assert.equal(season.body.totals.points, 5);
-    assert.equal(season.body.totals.possessions, 4);
-    assert.equal(season.body.totals.points_per_possession, 1.25);
-    assert.equal(season.body.totals.turnovers, 1);
+    const seasonGames = arrayField(season.body, "games");
+    assert.equal(field(seasonGames[0], "points_per_possession"), 2);
+    assert.equal(field(seasonGames[1], "possessions"), 3);
+    assert.equal(field(seasonGames[1], "turnovers"), 1);
+    const totals = objectField(season.body, "totals");
+    assert.equal(field(totals, "points"), 5);
+    assert.equal(field(totals, "possessions"), 4);
+    assert.equal(field(totals, "points_per_possession"), 1.25);
+    assert.equal(field(totals, "turnovers"), 1);
   });
 
   it("applies the schema script more than once", () => {
     const url = `file:${join(dir, "script.db")}`;
-    const script = fileURLToPath(new URL("../scripts/apply-schema.mjs", import.meta.url));
+    const script = fileURLToPath(new URL("../scripts/apply-schema.ts", import.meta.url));
     const run = () =>
-      spawnSync(process.execPath, [script], {
+      spawnSync(process.execPath, ["--import", "tsx", script], {
         cwd: root,
         env: { ...process.env, TURSO_DATABASE_URL: url },
         encoding: "utf8",
@@ -398,7 +407,7 @@ describe("games and events API", { concurrency: false }, () => {
     assert.match(second.stdout, /Schema applied/);
   });
 
-  function putGame(id, overrides = {}) {
+  function putGame(id: string, overrides: Record<string, unknown> = {}) {
     const body = {
       id,
       team_id: 1,
@@ -414,7 +423,7 @@ describe("games and events API", { concurrency: false }, () => {
     });
   }
 
-  function sync(id, events) {
+  function sync(id: string, events: TestEvent[]) {
     return call(onRequestSync, {
       url: `http://localhost/api/games/${id}/events/sync`,
       params: { id },
@@ -423,7 +432,14 @@ describe("games and events API", { concurrency: false }, () => {
   }
 });
 
-function tap(type, points, createdAt) {
+interface TestEvent {
+  id: string;
+  type: string;
+  points: number;
+  created_at: string;
+}
+
+function tap(type: string, points: number, createdAt: string): TestEvent {
   return {
     id: crypto.randomUUID(),
     type,
@@ -432,10 +448,49 @@ function tap(type, points, createdAt) {
   };
 }
 
-async function insertEvent(db, gameId, type, points) {
+async function insertEvent(
+  db: ReturnType<typeof getDb>,
+  gameId: string,
+  type: string,
+  points: number,
+): Promise<void> {
   await db.execute({
     sql: `INSERT INTO events (id, game_id, type, points, created_at)
           VALUES (?, ?, ?, ?, ?)`,
     args: [crypto.randomUUID(), gameId, type, points, "2026-10-04T10:00:00.000Z"],
   });
+}
+
+function objectBody(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new Error("Expected an object response body");
+  }
+  return value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function arrayBody(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) throw new Error("Expected an array response body");
+  return value.map(objectBody);
+}
+
+function field(value: unknown, key: string): unknown {
+  return objectBody(value)[key];
+}
+
+function objectField(value: unknown, key: string): Record<string, unknown> {
+  return objectBody(field(value, key));
+}
+
+function arrayField(value: unknown, key: string): Record<string, unknown>[] {
+  return arrayBody(field(value, key));
+}
+
+function stringField(value: unknown, key: string): string {
+  const fieldValue = field(value, key);
+  if (typeof fieldValue !== "string") throw new Error(`Expected ${key} to be a string`);
+  return fieldValue;
 }

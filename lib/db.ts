@@ -1,8 +1,10 @@
 import { createClient } from "@libsql/client";
+import type { Client } from "@libsql/client";
+import type { DatabaseEnv } from "../types.ts";
 
-const clients = new Map();
+const clients = new Map<string, Client>();
 
-export function getDb(env) {
+export function getDb(env: DatabaseEnv): Client {
   const url = env?.TURSO_DATABASE_URL;
   if (!url) {
     throw new Error("Missing TURSO_DATABASE_URL");
@@ -20,9 +22,10 @@ export function getDb(env) {
   return client;
 }
 
-export function closeDb(env) {
+export function closeDb(env: DatabaseEnv): void {
   const url = env?.TURSO_DATABASE_URL;
-  const client = url ? clients.get(url) : undefined;
+  if (!url) return;
+  const client = clients.get(url);
   if (!client) return;
   client.close();
   clients.delete(url);

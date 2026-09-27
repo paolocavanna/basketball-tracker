@@ -1,9 +1,10 @@
-import { getDb } from "../../../lib/db.js";
-import { error, handle, json, readJson } from "../../../lib/http.js";
-import { findGame, getGameDetail, teamExists } from "../../../lib/stats.js";
-import { parseGame, requireUuid } from "../../../lib/validators.js";
+import { getDb } from "../../../lib/db.ts";
+import { error, handle, json, readJson } from "../../../lib/http.ts";
+import { findGame, getGameDetail, teamExists } from "../../../lib/stats.ts";
+import { parseGame, requireUuid } from "../../../lib/validators.ts";
+import type { PagesContext } from "../../../types.ts";
 
-export async function onRequestGet(context) {
+export async function onRequestGet(context: PagesContext): Promise<Response> {
   return handle(async () => {
     const idError = requireUuid(context.params.id, "id");
     if (idError) return error(400, idError);
@@ -15,15 +16,15 @@ export async function onRequestGet(context) {
   });
 }
 
-export async function onRequestPut(context) {
+export async function onRequestPut(context: PagesContext): Promise<Response> {
   return handle(async () => {
     const idError = requireUuid(context.params.id, "id");
     if (idError) return error(400, idError);
 
     const body = await readJson(context.request);
-    if (body.error) return error(400, body.error);
+    if ("error" in body) return error(400, body.error);
     const parsed = parseGame(body.value, context.params.id);
-    if (parsed.error) return error(400, parsed.error);
+    if ("error" in parsed) return error(400, parsed.error);
 
     const db = getDb(context.env);
     const game = parsed.value;

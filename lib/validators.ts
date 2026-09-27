@@ -1,15 +1,30 @@
+import type { ApiEvent, EventType, ParsedGame, ValidationResult } from "../types.ts";
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const EVENT_TYPES = new Set(["SCORE", "EMPTY", "TOV", "OFF_REB", "DEF_REB"]);
 
-export function requireUuid(value, label) {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isEventType(value: unknown): value is EventType {
+  return (
+    value === "SCORE" ||
+    value === "EMPTY" ||
+    value === "TOV" ||
+    value === "OFF_REB" ||
+    value === "DEF_REB"
+  );
+}
+
+export function requireUuid(value: unknown, label: string): string | null {
   if (typeof value !== "string" || !UUID_RE.test(value)) {
     return `${label} must be a UUID`;
   }
   return null;
 }
 
-export function parsePositiveInt(value) {
+export function parsePositiveInt(value: unknown): number | null {
   if (typeof value === "number" && Number.isInteger(value) && value > 0) {
     return value;
   }
@@ -20,14 +35,14 @@ export function parsePositiveInt(value) {
   return null;
 }
 
-export function parseTeamIdParam(raw) {
+export function parseTeamIdParam(raw: string | null): ValidationResult<number> {
   if (raw == null || raw === "") return { error: "team_id is required" };
   const value = parsePositiveInt(raw);
   if (value == null) return { error: "team_id must be a positive integer" };
   return { value };
 }
 
-function requireDate(value) {
+function requireDate(value: unknown): string | null {
   if (typeof value !== "string" || !DATE_RE.test(value)) {
     return "date must be YYYY-MM-DD";
   }
@@ -43,7 +58,7 @@ function requireDate(value) {
   return null;
 }
 
-function requireTimestamp(value) {
+function requireTimestamp(value: unknown): string | null {
   if (typeof value !== "string" || value.trim() === "") {
     return "created_at is required";
   }
@@ -53,7 +68,7 @@ function requireTimestamp(value) {
   return null;
 }
 
-function optionalScore(value, label) {
+function optionalScore(value: unknown, label: string): ValidationResult<number | null> {
   if (value == null) return { value: null };
   if (typeof value === "number" && Number.isInteger(value) && value >= 0) {
     return { value };
@@ -61,10 +76,9 @@ function optionalScore(value, label) {
   return { error: `${label} must be a non-negative integer` };
 }
 
-export function parseGame(body, urlId) {
-  if (body == null || typeof body !== "object" || Array.isArray(body)) {
-    return { error: "Expected a JSON object" };
-  }
+export function parseGame(body: unknown, urlId: string): ValidationResult<ParsedGame> {
+  if (!isRecord(body)) return { error: "Expected a JSON object" };
+  if (typeof body.id !== "string") return { error: "id must be a UUID" };
   const idError = requireUuid(body.id, "id");
   if (idError) return { error: idError };
   if (body.id !== urlId) return { error: "id must match the URL" };
@@ -72,18 +86,20 @@ export function parseGame(body, urlId) {
   const teamId = parsePositiveInt(body.team_id);
   if (teamId == null) return { error: "team_id must be a positive integer" };
 
+  if (typeof body.date !== "string") return { error: "date must be YYYY-MM-DD" };
   const dateError = requireDate(body.date);
   if (dateError) return { error: dateError };
   if (typeof body.opponent !== "string" || body.opponent.trim() === "") {
     return { error: "opponent is required" };
   }
+  if (typeof body.created_at !== "string") return { error: "created_at is required" };
   const createdError = requireTimestamp(body.created_at);
   if (createdError) return { error: createdError };
 
   const scoreFor = optionalScore(body.final_score_for, "final_score_for");
-  if (scoreFor.error) return scoreFor;
+  if ("error" in scoreFor) return scoreFor;
   const scoreAgainst = optionalScore(body.final_score_against, "final_score_against");
-  if (scoreAgainst.error) return scoreAgainst;
+  if ("error" in scoreAgainst) return scoreAgainst;
 
   return {
     value: {
@@ -98,15 +114,17 @@ export function parseGame(body, urlId) {
   };
 }
 
-export function parseEventBatch(body) {
+export function parseEventBatch(body: unknown): { events: ApiEvent[] } | { error: string } {
   if (!Array.isArray(body)) return { error: "Expected an array of events" };
 
-  const events = [];
-  const seen = new Set();
+  const events: ApiEvent[] = [];
+  const seen = new Set<string>();
   for (let index = 0; index < body.length; index += 1) {
-    const item = body[index];
-    if (item == null || typeof item !== "object" || Array.isArray(item)) {
-      return { error: `Invalid event at index ${index}` };
+    const item: unknown = body[index];
+    if (!isRecord(item)) return { error: `Invalid event at index ${index}` };
+
+    if (typeof item.id !== "string") {
+      return { error: `Invalid event at index ${index}: id must be a UUID` };
     }
     const idError = requireUuid(item.id, "id");
     if (idError) return { error: `Invalid event at index ${index}: ${idError}` };
@@ -115,34 +133,33 @@ export function parseEventBatch(body) {
     }
     seen.add(item.id);
 
-    if (!EVENT_TYPES.has(item.type)) {
+    if (!isEventType(item.type)) {
       return {
         error: `Invalid event at index ${index}: type must be SCORE, EMPTY, TOV, OFF_REB, or DEF_REB`,
       };
     }
 
-    let points = item.points;
-    if (item.type === "SCORE") {
-      if (points !== 2 && points !== 3) {
-        return { error: `Invalid event at index ${index}: SCORE points must be 2 or 3` };
-      }
-    } else if (points == null) {
-      points = 0;
-    } else if (points !== 0) {
-      return { error: `Invalid event at index ${index}: ${item.type} points must be 0` };
+    const createdAt = item.created_at;
+    if (typeof createdAt !== "string") {
+      return { error: `Invalid event at index ${index}: created_at is required` };
     }
-
-    const createdError = requireTimestamp(item.created_at);
+    const createdError = requireTimestamp(createdAt);
     if (createdError) {
       return { error: `Invalid event at index ${index}: ${createdError}` };
     }
 
-    events.push({
-      id: item.id,
-      type: item.type,
-      points,
-      created_at: item.created_at,
-    });
+    if (item.type === "SCORE") {
+      if (item.points !== 2 && item.points !== 3) {
+        return { error: `Invalid event at index ${index}: SCORE points must be 2 or 3` };
+      }
+      events.push({ id: item.id, type: item.type, points: item.points, created_at: createdAt });
+      continue;
+    }
+
+    if (item.points != null && item.points !== 0) {
+      return { error: `Invalid event at index ${index}: ${item.type} points must be 0` };
+    }
+    events.push({ id: item.id, type: item.type, points: 0, created_at: createdAt });
   }
 
   return { events };

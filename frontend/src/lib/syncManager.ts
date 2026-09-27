@@ -14,8 +14,8 @@
 const INTERVAL_MS = 10_000;
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-function apiGame(game) {
-  const body = {
+function apiGame(game: StoredGame): PutGameRequest {
+  const body: PutGameRequest = {
     id: game.id,
     team_id: game.team_id,
     date: game.date,
@@ -27,17 +27,52 @@ function apiGame(game) {
   return body;
 }
 
-function apiEvent(event) {
+function apiEvent(event: StoredEvent): Omit<EventRecord, "game_id"> {
+  if (event.type === "SCORE") {
+    return {
+      id: event.id,
+      type: event.type,
+      points: event.points,
+      created_at: event.created_at,
+    };
+  }
   return {
     id: event.id,
     type: event.type,
-    points: event.points,
+    points: 0,
     created_at: event.created_at,
   };
 }
 
-function accepted(response) {
+function accepted(response: Response | null): boolean {
   return Boolean(response && response.ok);
+}
+
+type TimerHandle = unknown;
+type ScheduleTimer = (callback: () => void, delay: number) => TimerHandle;
+type CancelTimer = (handle: unknown) => void;
+type IdleCallback = (callback: () => void) => TimerHandle;
+
+export interface SyncManager {
+  start(): void;
+  stop(): void;
+  kick(): void;
+  syncNow(): Promise<{ ok: boolean }>;
+  settled(): Promise<{ ok: boolean }>;
+}
+
+export interface SyncManagerOptions {
+  store: LocalStore;
+  fetch?: (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+  target?: Pick<EventTarget, "addEventListener" | "removeEventListener">;
+  intervalMs?: number;
+  onSettled?: () => void;
+  setTimeout?: ScheduleTimer;
+  clearTimeout?: CancelTimer;
+  setInterval?: ScheduleTimer;
+  clearInterval?: CancelTimer;
+  requestIdleCallback?: IdleCallback;
+  cancelIdleCallback?: CancelTimer;
 }
 
 export function createSyncManager({
@@ -47,32 +82,36 @@ export function createSyncManager({
   intervalMs = INTERVAL_MS,
   onSettled,
   setTimeout: scheduleTimeout = globalThis.setTimeout,
-  clearTimeout: cancelTimeout = globalThis.clearTimeout,
+  clearTimeout: cancelTimeout = (handle) =>
+    globalThis.clearTimeout(handle as ReturnType<typeof globalThis.setTimeout>),
   setInterval: scheduleInterval = globalThis.setInterval,
-  clearInterval: cancelInterval = globalThis.clearInterval,
+  clearInterval: cancelInterval = (handle) =>
+    globalThis.clearInterval(handle as ReturnType<typeof globalThis.setInterval>),
   ...timers
-} = {}) {
-  if (!store) throw new Error("createSyncManager requires a store");
-
+}: SyncManagerOptions): SyncManager {
   // `in` so a test can force the Safari fallback by passing undefined,
   // rather than inheriting a requestIdleCallback from the environment.
+  const idleGlobals = globalThis as typeof globalThis & {
+    requestIdleCallback?: IdleCallback;
+    cancelIdleCallback?: CancelTimer;
+  };
   const requestIdle =
-    "requestIdleCallback" in timers ? timers.requestIdleCallback : globalThis.requestIdleCallback;
+    "requestIdleCallback" in timers ? timers.requestIdleCallback : idleGlobals.requestIdleCallback;
   const cancelIdle =
-    "cancelIdleCallback" in timers ? timers.cancelIdleCallback : globalThis.cancelIdleCallback;
+    "cancelIdleCallback" in timers ? timers.cancelIdleCallback : idleGlobals.cancelIdleCallback;
 
   let started = false;
   let stopped = false;
   let running = false;
   let rerun = false;
-  let inflight = null;
-  let intervalId = null;
-  let idleHandle = null;
-  let idleMode = null;
+  let inflight: Promise<{ ok: boolean }> | null = null;
+  let intervalId: TimerHandle | null = null;
+  let idleHandle: TimerHandle | null = null;
+  let idleMode: "ric" | "timeout" | null = null;
 
   function scheduleIdle() {
     if (stopped || idleHandle != null) return;
-    const run = () => {
+    const run = (): void => {
       idleHandle = null;
       idleMode = null;
       if (!stopped) void syncNow();
@@ -99,7 +138,7 @@ export function createSyncManager({
   // A rejected fetch and a 500 are both just a failed request for the pass, so
   // send hands back the response and lets each caller judge it. The caller that
   // needs to know why asks for the status.
-  async function send(url, options) {
+  async function send(url: string, options: RequestInit): Promise<Response | null> {
     try {
       return await fetchImpl(url, options);
     } catch {
@@ -107,7 +146,7 @@ export function createSyncManager({
     }
   }
 
-  async function syncGames() {
+  async function syncGames(): Promise<boolean> {
     let ok = true;
     const games = await store.pendingGames();
     for (const game of games) {
@@ -126,10 +165,10 @@ export function createSyncManager({
     return ok;
   }
 
-  async function syncEventBatches() {
+  async function syncEventBatches(): Promise<boolean> {
     let ok = true;
     const events = await store.pendingEvents();
-    const groups = new Map();
+    const groups = new Map<string, StoredEvent[]>();
     for (const event of events) {
       const batch = groups.get(event.game_id);
       if (batch) batch.push(event);
@@ -176,7 +215,7 @@ export function createSyncManager({
   // no-op there, which covers an undo that landed while the POST was in flight.
   // `forcedDeleteIds` covers the case where that DELETE already succeeded and
   // another tab marked the tombstone synced before this POST reinserted the row.
-  async function syncDeletions() {
+  async function syncDeletions(): Promise<boolean> {
     let ok = true;
     const [deletions, forced] = await Promise.all([
       store.pendingDeletions(),
@@ -197,14 +236,14 @@ export function createSyncManager({
     return ok;
   }
 
-  async function runPass() {
+  async function runPass(): Promise<boolean> {
     const gamesOk = await syncGames();
     const eventsOk = await syncEventBatches();
     const deletionsOk = await syncDeletions();
     return gamesOk && eventsOk && deletionsOk;
   }
 
-  async function execute() {
+  async function execute(): Promise<{ ok: boolean }> {
     try {
       for (;;) {
         rerun = false;
@@ -221,11 +260,11 @@ export function createSyncManager({
     }
   }
 
-  function syncNow() {
+  function syncNow(): Promise<{ ok: boolean }> {
     if (stopped) return Promise.resolve({ ok: false });
     if (running) {
       rerun = true;
-      return inflight;
+      return inflight ?? Promise.resolve({ ok: false });
     }
     running = true;
     inflight = execute().finally(() => {
@@ -243,11 +282,11 @@ export function createSyncManager({
     return inflight;
   }
 
-  function onOnline() {
+  function onOnline(): void {
     void syncNow();
   }
 
-  function kick() {
+  function kick(): void {
     if (stopped) return;
     if (running) {
       rerun = true;
@@ -256,7 +295,7 @@ export function createSyncManager({
     scheduleIdle();
   }
 
-  function start() {
+  function start(): void {
     if (started) return;
     started = true;
     stopped = false;
@@ -267,7 +306,7 @@ export function createSyncManager({
     scheduleIdle();
   }
 
-  function stop() {
+  function stop(): void {
     stopped = true;
     if (started) target.removeEventListener("online", onOnline);
     started = false;
@@ -278,9 +317,11 @@ export function createSyncManager({
     clearIdle();
   }
 
-  function settled() {
+  function settled(): Promise<{ ok: boolean }> {
     return inflight ?? Promise.resolve({ ok: true });
   }
 
   return { start, stop, kick, syncNow, settled };
 }
+import type { EventRecord, PutGameRequest, StoredEvent, StoredGame } from "../../../types.ts";
+import type { LocalStore } from "./localStore.ts";

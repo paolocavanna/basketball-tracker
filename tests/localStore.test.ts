@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
-import { createLocalStore } from "../frontend/src/lib/localStore.js";
-import { computeStats } from "../frontend/src/lib/stats.js";
+import { createLocalStore } from "../frontend/src/lib/localStore.ts";
+import type { LocalStore } from "../frontend/src/lib/localStore.ts";
+import type { EventType } from "../types.ts";
+import { computeStats } from "../frontend/src/lib/stats.ts";
 
 const GAME_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 const OTHER_GAME_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
@@ -10,30 +12,44 @@ const OTHER_GAME_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 // A fresh in-memory database per test, exposed through the real IndexedDB
 // globals so nothing in the store can reach for the network or for state
 // another test left behind.
-function withDatabase(factory, run) {
+function withDatabase<T>(factory: IDBFactory, run: () => T | Promise<T>): Promise<T> {
   const previous = { indexedDB: globalThis.indexedDB, IDBKeyRange: globalThis.IDBKeyRange };
   globalThis.indexedDB = factory;
   globalThis.IDBKeyRange = IDBKeyRange;
-  return Promise.resolve(run()).finally(() => {
-    Object.assign(globalThis, previous);
-  });
+  return Promise.resolve()
+    .then(run)
+    .finally(() => {
+      Object.assign(globalThis, previous);
+    });
 }
 
-function withStore(run) {
+function withStore<T>(run: (store: LocalStore) => T | Promise<T>): Promise<T> {
   return withDatabase(new IDBFactory(), () => run(createLocalStore()));
 }
 
 // Consecutive taps in a test land inside the same millisecond, so the courtside
 // clock is supplied explicitly wherever the order of the log matters.
-const at = (n) => `2026-10-04T10:${String(n).padStart(2, "0")}:00.000Z`;
+const at = (n: number): string => `2026-10-04T10:${String(n).padStart(2, "0")}:00.000Z`;
 
-function tap(store, gameId, type, points, minute) {
-  return store.saveEvent({
-    game_id: gameId,
-    type,
-    points,
-    created_at: at(minute),
-  });
+function tap(store: LocalStore, gameId: string, type: EventType, points: number, minute: number) {
+  const common = { game_id: gameId, created_at: at(minute) };
+  if (type === "SCORE") {
+    if (points !== 2 && points !== 3) throw new Error("Score points must be 2 or 3");
+    return store.saveEvent({ ...common, type, points });
+  }
+  return store.saveEvent({ ...common, type, points: 0 });
+}
+
+async function loadGame(store: LocalStore, id: string) {
+  const game = await store.loadGame(id);
+  assert.ok(game);
+  return game;
+}
+
+async function lastEvent(store: LocalStore, gameId: string) {
+  const event = await store.lastEvent(gameId);
+  assert.ok(event);
+  return event;
 }
 
 describe("local store schema", () => {
@@ -59,7 +75,7 @@ describe("local store schema", () => {
       await tap(first, GAME_ID, "SCORE", 3, 1);
 
       const second = createLocalStore();
-      assert.equal((await second.loadGame(GAME_ID)).opponent_name, "Novi Ligure");
+      assert.equal((await loadGame(second, GAME_ID)).opponent_name, "Novi Ligure");
       assert.deepEqual(
         (await second.loadGameEvents(GAME_ID)).map((event) => event.type),
         ["SCORE"],
@@ -123,16 +139,25 @@ describe("events", () => {
   it("refuses a type the statistics rules do not define", () =>
     withStore(async (store) => {
       await assert.rejects(
-        () => store.saveEvent({ game_id: GAME_ID, type: "MISS" }),
+        () => Reflect.apply(store.saveEvent, store, [{ game_id: GAME_ID, type: "MISS" }]),
         /Unknown event type/,
       );
-      await assert.rejects(() => store.saveEvent({ game_id: GAME_ID }), /Unknown event type/);
+      await assert.rejects(
+        () => Reflect.apply(store.saveEvent, store, [{ game_id: GAME_ID }]),
+        /Unknown event type/,
+      );
       assert.deepEqual(await store.loadGameEvents(GAME_ID), []);
     }));
 
   it("returns a game event log in tap order", () =>
     withStore(async (store) => {
-      await store.saveGame({ id: GAME_ID, team_id: 1, date: "2026-10-04", opponent_name: "Novi" });
+      await store.saveGame({
+        id: GAME_ID,
+        team_id: 1,
+        date: "2026-10-04",
+        opponent_name: "Novi",
+        created_at: "2026-10-04T18:00:00.000Z",
+      });
       await tap(store, GAME_ID, "SCORE", 2, 1);
       await tap(store, GAME_ID, "OFF_REB", 0, 2);
       await tap(store, GAME_ID, "TOV", 0, 3);
@@ -195,7 +220,7 @@ describe("undo", () => {
 
       await tap(store, GAME_ID, "SCORE", 2, 1);
       const latest = await tap(store, GAME_ID, "DEF_REB", 0, 2);
-      assert.equal((await store.lastEvent(GAME_ID)).id, latest.id);
+      assert.equal((await lastEvent(store, GAME_ID)).id, latest.id);
     }));
 
   it("skips an undone tap and falls back to the one before it", () =>
@@ -204,7 +229,7 @@ describe("undo", () => {
       const second = await tap(store, GAME_ID, "TOV", 0, 2);
       await store.deleteEvent(second.id);
 
-      assert.equal((await store.lastEvent(GAME_ID)).id, first.id);
+      assert.equal((await lastEvent(store, GAME_ID)).id, first.id);
 
       await store.deleteEvent(first.id);
       assert.equal(await store.lastEvent(GAME_ID), null);
@@ -216,7 +241,7 @@ describe("undo", () => {
       await tap(store, GAME_ID, "TOV", 0, 2);
       await store.markEventsSynced([score.id]);
 
-      assert.equal((await store.lastEvent(GAME_ID)).type, "TOV");
+      assert.equal((await lastEvent(store, GAME_ID)).type, "TOV");
     }));
 });
 
@@ -306,8 +331,12 @@ describe("sync state", () => {
       assert.deepEqual(deletedIds, [score.id]);
 
       const events = await store.loadGameEvents(GAME_ID);
-      assert.equal(events.find((event) => event.id === score.id).synced, false);
-      assert.equal(events.find((event) => event.id === kept.id).synced, true);
+      const undoneScore = events.find((event) => event.id === score.id);
+      const keptEvent = events.find((event) => event.id === kept.id);
+      assert.ok(undoneScore);
+      assert.ok(keptEvent);
+      assert.equal(undoneScore.synced, false);
+      assert.equal(keptEvent.synced, true);
       assert.deepEqual(await store.forcedDeleteIds(), [score.id]);
 
       await store.markDeletionsSynced([score.id]);
@@ -334,12 +363,12 @@ describe("sync state", () => {
 
       await store.saveGame({ ...saved, opponent_name: "Alba" });
       assert.equal(await store.markGameSynced(GAME_ID, saved), false);
-      assert.equal((await store.loadGame(GAME_ID)).synced, false);
+      assert.equal((await loadGame(store, GAME_ID)).synced, false);
       assert.equal(await store.markGameSynced(crypto.randomUUID(), saved), false);
 
-      const current = await store.loadGame(GAME_ID);
+      const current = await loadGame(store, GAME_ID);
       assert.equal(await store.markGameSynced(GAME_ID, current), true);
-      assert.equal((await store.loadGame(GAME_ID)).synced, true);
+      assert.equal((await loadGame(store, GAME_ID)).synced, true);
       assert.deepEqual(await store.pendingGames(), []);
     }));
 

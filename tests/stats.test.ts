@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { activeEvents, computeStats, endsPossession } from "../frontend/src/lib/stats.js";
+import { activeEvents, computeStats, endsPossession } from "../frontend/src/lib/stats.ts";
+import type { EventPayload, EventType, StoredEvent } from "../types.ts";
 
 describe("possession rules", () => {
   it("ends a possession on SCORE, EMPTY and TOV only", () => {
@@ -134,7 +135,8 @@ describe("game statistics", () => {
 describe("activeEvents", () => {
   it("keeps the first copy of an id and drops undone events", () => {
     const first = event("SCORE", 2);
-    const second = { ...first, points: 3 };
+    if (first.type !== "SCORE") throw new Error("Expected the score fixture");
+    const second = { ...first, points: 3 as const };
     assert.deepEqual(activeEvents([first, second, { ...first, deleted: true }]), [first]);
   });
 
@@ -146,14 +148,21 @@ describe("activeEvents", () => {
 
 let nextId = 0;
 
-function event(type, points) {
+function event(type: EventType, points: number): StoredEvent {
   nextId += 1;
+  let payload: EventPayload;
+  if (type === "SCORE") {
+    if (points !== 2 && points !== 3) throw new Error("Score points must be 2 or 3");
+    payload = { type, points };
+  } else {
+    payload = { type, points: 0 };
+  }
   return {
     id: `event-${nextId}`,
     game_id: "game-1",
-    type,
-    points,
+    ...payload,
     created_at: `2026-10-04T10:${String(nextId).padStart(2, "0")}:00.000Z`,
     synced: false,
+    deleted: false,
   };
 }

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
-function loadDotEnv() {
+function loadDotEnv(): void {
   const path = join(root, ".env");
   if (!existsSync(path)) return;
   for (const line of readFileSync(path, "utf8").split("\n")) {
@@ -25,7 +25,7 @@ function loadDotEnv() {
   }
 }
 
-function redact(message) {
+function redact(message: string): string {
   let text = String(message);
   for (const key of ["TURSO_DATABASE_URL", "TURSO_AUTH_TOKEN"]) {
     const secret = process.env[key];
@@ -34,7 +34,7 @@ function redact(message) {
   return text;
 }
 
-function splitSql(script) {
+function splitSql(script: string): string[] {
   const statements = [];
   let current = "";
   for (const line of script.split("\n")) {
@@ -51,14 +51,14 @@ function splitSql(script) {
   return statements;
 }
 
-function alreadyApplied(err) {
-  const message = String(err?.message ?? err);
+function alreadyApplied(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
   return (
     message.includes("already exists") || message.includes("UNIQUE constraint failed: teams.slug")
   );
 }
 
-async function main() {
+async function main(): Promise<void> {
   loadDotEnv();
   const url = process.env.TURSO_DATABASE_URL;
   if (!url) {
@@ -83,7 +83,8 @@ async function main() {
     }
     console.log("Schema applied");
   } catch (err) {
-    console.error(redact(err?.message ?? err));
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(redact(message));
     process.exitCode = 1;
   } finally {
     client.close();

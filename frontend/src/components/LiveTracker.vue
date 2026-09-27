@@ -1,8 +1,16 @@
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import text from "../text/en.json";
-import { commitTap, commitUndo, formatPpp, isPending, mergeStoredEvents } from "../lib/liveLog.js";
-import { computeStats } from "../lib/stats.js";
+import { commitTap, commitUndo, formatPpp, isPending, mergeStoredEvents } from "../lib/liveLog.ts";
+import type { LocalStore } from "../lib/localStore.ts";
+import { computeStats } from "../lib/stats.ts";
+import type { SyncManager } from "../lib/syncManager.ts";
+import type { EventPayload, StoredEvent, StoredGame } from "../../../types.ts";
+
+type LabeledAction = EventPayload & {
+  label: string;
+  tone: "score" | "empty" | "turnover" | "rebound";
+};
 
 const ACTIONS = [
   { type: "SCORE", points: 2, label: text.actions.two, tone: "score" },
@@ -11,19 +19,19 @@ const ACTIONS = [
   { type: "TOV", points: 0, label: text.actions.turnover, tone: "turnover" },
   { type: "OFF_REB", points: 0, label: text.actions.offensiveRebound, tone: "rebound" },
   { type: "DEF_REB", points: 0, label: text.actions.defensiveRebound, tone: "rebound" },
-];
+] satisfies LabeledAction[];
 
-const props = defineProps({
-  gameId: { type: String, required: true },
-  store: { type: Object, required: true },
-  sync: { type: Object, required: true },
-  statusTick: { type: Number, required: true },
-});
+const props = defineProps<{
+  gameId: string;
+  store: LocalStore;
+  sync: SyncManager;
+  statusTick: number;
+}>();
 
-const emit = defineEmits(["navigate"]);
+const emit = defineEmits<{ navigate: [path: string] }>();
 
-const game = ref(null);
-const events = ref([]);
+const game = ref<StoredGame | null>(null);
+const events = ref<StoredEvent[]>([]);
 const ready = ref(false);
 const missing = ref(false);
 const failed = ref(false);
@@ -45,15 +53,14 @@ const undoLabel = computed(() => {
   return last ? (EVENT_LABELS.get(`${last.type}:${last.points}`) ?? "") : "";
 });
 
-function record(type, points) {
+function record(action: (typeof ACTIONS)[number]): void {
   if (!ready.value || missing.value || failed.value) return;
   notice.value = "";
   const result = commitTap({
     store: props.store,
     sync: props.sync,
     gameId: props.gameId,
-    type,
-    points,
+    payload: action,
     events: events.value,
   });
   events.value = result.events;
@@ -64,7 +71,7 @@ function record(type, points) {
   });
 }
 
-function undo() {
+function undo(): void {
   if (!ready.value || !canUndo.value) return;
   notice.value = "";
   const result = commitUndo({
@@ -85,7 +92,7 @@ function undo() {
 // A pass can settle while the log is still opening, and two refreshes can
 // overlap. Only the newest read may paint, and opening refreshes once it is
 // ready so that early pass is not dropped on the floor.
-async function refreshSyncFlags() {
+async function refreshSyncFlags(): Promise<void> {
   if (!ready.value || missing.value || failed.value) return;
   const token = ++refreshToken;
   const [storedGame, storedEvents] = await Promise.all([
@@ -190,7 +197,7 @@ watch(
         class="action"
         :class="`action-${action.tone}`"
         :disabled="!ready"
-        @click="record(action.type, action.points)"
+        @click="record(action)"
       >
         {{ action.label }}
       </button>

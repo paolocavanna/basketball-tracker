@@ -1,7 +1,8 @@
-<script setup>
+<script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import text from "../text/en.json";
-import { SEEDED_TEAM_ID, loadTeamId } from "../lib/team.js";
+import { SEEDED_TEAM_ID, loadTeamId } from "../lib/team.ts";
+import { readGameDetail, readSeasonSummary } from "../lib/api.ts";
 import {
   polylinePoints,
   pppSeries,
@@ -9,19 +10,30 @@ import {
   sharedCeiling,
   trendX,
   trendY,
-} from "../lib/trends.js";
+} from "../lib/trends.ts";
+import type { GameDetail, SeasonGame } from "../../../types.ts";
 
-const games = ref([]);
+defineEmits<{ navigate: [path: string] }>();
+
+interface Possession {
+  points: number;
+  offensiveRebounds: number;
+  result: string;
+}
+
+const games = ref<SeasonGame[]>([]);
 const selectedId = ref("");
-const selectedGame = ref(null);
+const selectedGame = ref<GameDetail | null>(null);
 const loading = ref(true);
 const seasonError = ref("");
 const detailError = ref("");
 const teamId = ref(SEEDED_TEAM_ID);
 
 const selectedSummary = computed(() => games.value.find((game) => game.id === selectedId.value));
+const firstGame = computed(() => games.value[0] ?? null);
+const latestGame = computed(() => games.value.at(-1) ?? null);
 
-function formatDate(date) {
+function formatDate(date: string): string {
   return new Intl.DateTimeFormat("en-GB", {
     day: "numeric",
     month: "short",
@@ -30,11 +42,11 @@ function formatDate(date) {
   }).format(new Date(`${date}T00:00:00Z`));
 }
 
-function formatPpp(value) {
+function formatPpp(value: number | null | undefined): string {
   return value == null ? "—" : Number(value).toFixed(2);
 }
 
-async function selectGame(id) {
+async function selectGame(id: string): Promise<void> {
   selectedId.value = id;
   selectedGame.value = null;
   detailError.value = "";
@@ -42,7 +54,8 @@ async function selectGame(id) {
   try {
     const response = await fetch(`/api/games/${encodeURIComponent(id)}`);
     if (!response.ok) throw new Error(text.dashboard.detailLoadError);
-    const detail = await response.json();
+    const payload: unknown = await response.json();
+    const detail = readGameDetail(payload);
     if (selectedId.value !== id) return;
     selectedGame.value = detail;
   } catch {
@@ -56,9 +69,10 @@ onMounted(async () => {
   try {
     const response = await fetch(`/api/stats/season?team_id=${teamId.value}`);
     if (!response.ok) throw new Error(text.dashboard.seasonLoadError);
-    const season = await response.json();
-    games.value = season.games || [];
-    if (games.value.length) await selectGame(games.value.at(-1).id);
+    const payload: unknown = await response.json();
+    const season = readSeasonSummary(payload);
+    games.value = season.games;
+    if (latestGame.value) await selectGame(latestGame.value.id);
   } catch {
     seasonError.value = text.dashboard.seasonLoadError;
   } finally {
@@ -66,10 +80,10 @@ onMounted(async () => {
   }
 });
 
-const possessions = computed(() => {
+const possessions = computed<Possession[]>(() => {
   if (!selectedGame.value) return [];
   const result = [];
-  let current = { points: 0, offensiveRebounds: 0, result: "" };
+  let current: Possession = { points: 0, offensiveRebounds: 0, result: "" };
   for (const event of selectedGame.value.events || []) {
     if (event.type === "OFF_REB") current.offensiveRebounds += 1;
     if (event.type === "SCORE") current.points += Number(event.points || 0);
@@ -104,21 +118,21 @@ const turnoverLine = computed(() =>
   ),
 );
 
-function turnoverY(value) {
+function turnoverY(value: number): number {
   return trendY(Number(value) || 0, turnoverCeiling.value);
 }
 
-function possessionAlt(count) {
-  return text.dashboard.pointsEachPossessionAlt.replace("{count}", count);
+function possessionAlt(count: number): string {
+  return text.dashboard.pointsEachPossessionAlt.replace("{count}", String(count));
 }
 
-function possessionTitle(index, possession) {
+function possessionTitle(index: number, possession: Possession): string {
   const rebounds = possession.offensiveRebounds
     ? `, ${possession.offensiveRebounds} ${text.dashboard.offensiveReboundsCount}`
     : "";
   return text.dashboard.possessionLabel
-    .replace("{number}", index + 1)
-    .replace("{points}", possession.points)
+    .replace("{number}", String(index + 1))
+    .replace("{points}", String(possession.points))
     .replace("{result}", possession.result)
     .replace("{rebounds}", rebounds);
 }
@@ -164,7 +178,7 @@ function possessionTitle(index, possession) {
           <article class="trend-card">
             <div class="trend-heading">
               <h3>{{ text.dashboard.pointsPerPossession }}</h3>
-              <span class="trend-current">{{ formatPpp(games.at(-1).points_per_possession) }}</span>
+              <span class="trend-current">{{ formatPpp(latestGame?.points_per_possession) }}</span>
             </div>
             <svg
               class="trend-chart"
@@ -189,15 +203,15 @@ function possessionTitle(index, possession) {
               />
             </svg>
             <div class="chart-caption">
-              <span>{{ formatDate(games[0].date) }}</span
+              <span>{{ formatDate(firstGame?.date ?? "") }}</span
               ><span>{{ text.dashboard.chronological }}</span
-              ><span>{{ formatDate(games.at(-1).date) }}</span>
+              ><span>{{ formatDate(latestGame?.date ?? "") }}</span>
             </div>
           </article>
           <article class="trend-card">
             <div class="trend-heading">
               <h3>{{ text.dashboard.turnovers }}</h3>
-              <span class="trend-current">{{ games.at(-1).turnovers }}</span>
+              <span class="trend-current">{{ latestGame?.turnovers ?? 0 }}</span>
             </div>
             <svg
               class="trend-chart"
@@ -221,9 +235,9 @@ function possessionTitle(index, possession) {
               />
             </svg>
             <div class="chart-caption">
-              <span>{{ formatDate(games[0].date) }}</span
+              <span>{{ formatDate(firstGame?.date ?? "") }}</span
               ><span>{{ text.dashboard.chronological }}</span
-              ><span>{{ formatDate(games.at(-1).date) }}</span>
+              ><span>{{ formatDate(latestGame?.date ?? "") }}</span>
             </div>
           </article>
           <article class="trend-card trend-card-wide">
@@ -269,9 +283,9 @@ function possessionTitle(index, possession) {
               />
             </svg>
             <div class="chart-caption">
-              <span>{{ formatDate(games[0].date) }}</span
+              <span>{{ formatDate(firstGame?.date ?? "") }}</span
               ><span>{{ text.dashboard.chronological }}</span
-              ><span>{{ formatDate(games.at(-1).date) }}</span>
+              ><span>{{ formatDate(latestGame?.date ?? "") }}</span>
             </div>
           </article>
         </div>

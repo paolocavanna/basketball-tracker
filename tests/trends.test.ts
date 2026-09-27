@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { pppSeries, reboundSeries, trendY } from "../frontend/src/lib/trends.js";
+import { pppSeries, reboundSeries, trendY } from "../frontend/src/lib/trends.ts";
+import type { SeasonGame } from "../types.ts";
 
-function game(id, stats) {
+function game(id: string, stats: Partial<SeasonGame>): SeasonGame {
   return {
     id,
+    date: "2026-10-04",
+    opponent_name: "Opponent",
+    points: 0,
     possessions: 0,
     points_per_possession: null,
     offensive_rebounds: 0,
@@ -42,7 +46,9 @@ describe("season charts", () => {
       series.dots.map((dot) => dot.id),
       ["scored", "zero", "again"],
     );
-    assert.equal(series.dots.find((dot) => dot.id === "zero").y, trendY(0, 2.5));
+    const zero = series.dots.find((dot) => dot.id === "zero");
+    assert.ok(zero);
+    assert.equal(zero.y, trendY(0, 2.5));
     assert.equal(series.segments.length, 1);
     assert.equal(series.segments[0].split(" ").length, 2);
   });

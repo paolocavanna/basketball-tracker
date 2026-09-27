@@ -1,15 +1,15 @@
-<script setup>
+<script setup lang="ts">
 import { onMounted, ref } from "vue";
 import text from "../text/en.json";
-import { livePath } from "../lib/route.js";
-import { SEEDED_TEAM_ID, loadTeamId } from "../lib/team.js";
+import type { LocalStore } from "../lib/localStore.ts";
+import { livePath } from "../lib/route.ts";
+import type { SyncManager } from "../lib/syncManager.ts";
+import { SEEDED_TEAM_ID, loadTeamId } from "../lib/team.ts";
+import type { GameRecord } from "../../../types.ts";
 
-const props = defineProps({
-  store: { type: Object, required: true },
-  sync: { type: Object, required: true },
-});
+const props = defineProps<{ store: LocalStore; sync: SyncManager }>();
 
-const emit = defineEmits(["navigate"]);
+const emit = defineEmits<{ navigate: [path: string] }>();
 
 const opponent = ref("");
 const date = ref(localDate());
@@ -17,7 +17,7 @@ const teamId = ref(SEEDED_TEAM_ID);
 const saving = ref(false);
 const error = ref("");
 
-function localDate(now = new Date()) {
+function localDate(now = new Date()): string {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${now.getFullYear()}-${month}-${day}`;
@@ -27,20 +27,21 @@ onMounted(async () => {
   teamId.value = await loadTeamId();
 });
 
-async function start() {
+async function start(): Promise<void> {
   const name = opponent.value.trim();
   if (!name || saving.value) return;
   saving.value = true;
   error.value = "";
   const id = crypto.randomUUID();
   try {
-    await props.store.saveGame({
+    const game: GameRecord = {
       id,
       team_id: teamId.value,
       date: date.value,
       opponent_name: name,
       created_at: new Date().toISOString(),
-    });
+    };
+    await props.store.saveGame(game);
   } catch {
     saving.value = false;
     error.value = text.start.saveError;

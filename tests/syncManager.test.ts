@@ -1,16 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
-import { createLocalStore } from "../frontend/src/lib/localStore.js";
-import { createSyncManager } from "../frontend/src/lib/syncManager.js";
-import { computeStats } from "../frontend/src/lib/stats.js";
+import { createLocalStore } from "../frontend/src/lib/localStore.ts";
+import type { LocalStore } from "../frontend/src/lib/localStore.ts";
+import { createSyncManager } from "../frontend/src/lib/syncManager.ts";
+import { computeStats } from "../frontend/src/lib/stats.ts";
+import type { GameRecord } from "../types.ts";
 
 const GAME_ID = "0f8fad5b-d9cb-469f-a165-70867728950e";
 const OTHER_GAME_ID = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 
-const at = (minute) => `2026-10-04T10:${String(minute).padStart(2, "0")}:00.000Z`;
+const at = (minute: number): string => `2026-10-04T10:${String(minute).padStart(2, "0")}:00.000Z`;
 
-function game(id, opponent, createdAt = "2026-10-04T18:00:00.000Z") {
+function game(id: string, opponent: string, createdAt = "2026-10-04T18:00:00.000Z"): GameRecord {
   return {
     id,
     team_id: 1,
@@ -21,14 +23,14 @@ function game(id, opponent, createdAt = "2026-10-04T18:00:00.000Z") {
 }
 
 function deferred() {
-  let open;
-  const opened = new Promise((resolve) => {
+  let open!: () => void;
+  const opened = new Promise<void>((resolve) => {
     open = resolve;
   });
   return { opened, open };
 }
 
-async function waitFor(predicate) {
+async function waitFor(predicate: () => boolean): Promise<void> {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     if (predicate()) return;
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -36,76 +38,137 @@ async function waitFor(predicate) {
   throw new Error("condition was not met");
 }
 
-function recorded(handler) {
-  const calls = [];
+interface HttpCall {
+  url: string;
+  method: string | undefined;
+  body: unknown;
+}
+
+function recorded(handler: (call: HttpCall) => Response | Promise<Response>) {
+  const calls: HttpCall[] = [];
   return {
     calls,
-    fetch(url, options = {}) {
+    fetch(url: string | URL | Request, options: RequestInit = {}): Promise<Response> {
       const call = {
         url: String(url),
         method: options.method,
-        body: options.body == null ? null : JSON.parse(options.body),
+        body: options.body == null ? null : parseRequestBody(options.body),
       };
       calls.push(call);
-      return handler(call);
+      return Promise.resolve(handler(call));
     },
   };
 }
 
-const posts = (calls) => calls.filter((call) => call.method === "POST");
-const puts = (calls) => calls.filter((call) => call.method === "PUT");
-const deletes = (calls) => calls.filter((call) => call.method === "DELETE");
+const posts = (calls: readonly HttpCall[]): HttpCall[] =>
+  calls.filter((call) => call.method === "POST");
+const puts = (calls: readonly HttpCall[]): HttpCall[] =>
+  calls.filter((call) => call.method === "PUT");
+const deletes = (calls: readonly HttpCall[]): HttpCall[] =>
+  calls.filter((call) => call.method === "DELETE");
 
-function accepted(call) {
+function accepted(call: HttpCall): Response {
   if (call.method === "DELETE") return new Response(null, { status: 204 });
   const synced = Array.isArray(call.body) ? call.body.length : 1;
   return Response.json({ synced }, { status: call.method === "PUT" ? 201 : 200 });
 }
 
+interface TimerHandle {
+  fn: () => void;
+  ms: number;
+}
+
+interface IdleHandle {
+  fn: () => void;
+}
+
 function clock() {
-  const intervals = [];
-  const timeouts = [];
-  const idle = [];
+  const intervals: TimerHandle[] = [];
+  const timeouts: TimerHandle[] = [];
+  const idle: IdleHandle[] = [];
   return {
     intervals,
     timeouts,
     idle,
-    setInterval(fn, ms) {
+    setInterval(fn: () => void, ms: number) {
       const handle = { fn, ms };
       intervals.push(handle);
       return handle;
     },
-    clearInterval(handle) {
-      const index = intervals.indexOf(handle);
+    clearInterval(handle: unknown) {
+      const index = intervals.findIndex((entry) => entry === handle);
       if (index >= 0) intervals.splice(index, 1);
     },
-    setTimeout(fn, ms) {
+    setTimeout(fn: () => void, ms: number) {
       const handle = { fn, ms };
       timeouts.push(handle);
       return handle;
     },
-    clearTimeout(handle) {
-      const index = timeouts.indexOf(handle);
+    clearTimeout(handle: unknown) {
+      const index = timeouts.findIndex((entry) => entry === handle);
       if (index >= 0) timeouts.splice(index, 1);
     },
-    requestIdleCallback(fn) {
+    requestIdleCallback(fn: () => void) {
       const handle = { fn };
       idle.push(handle);
       return handle;
     },
-    cancelIdleCallback(handle) {
-      const index = idle.indexOf(handle);
+    cancelIdleCallback(handle: unknown) {
+      const index = idle.findIndex((entry) => entry === handle);
       if (index >= 0) idle.splice(index, 1);
     },
   };
 }
 
-async function withStore(run) {
+async function withStore(run: (store: LocalStore) => Promise<void> | void): Promise<void> {
   const store = createLocalStore({
     indexedDB: new IDBFactory(),
     IDBKeyRange,
   });
   await run(store);
+}
+
+async function loadGame(store: LocalStore, id: string) {
+  const game = await store.loadGame(id);
+  assert.ok(game);
+  return game;
+}
+
+function parseRequestBody(body: BodyInit): unknown {
+  if (typeof body !== "string") throw new Error("Expected a JSON request body");
+  return JSON.parse(body) as unknown;
+}
+
+function objectBody(value: unknown): Record<string, unknown> {
+  if (!isRecord(value)) {
+    throw new Error("Expected an object request body");
+  }
+  return value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function eventIds(value: unknown): string[] {
+  if (!Array.isArray(value)) throw new Error("Expected an event batch");
+  return value.map((event) => {
+    const id = objectBody(event).id;
+    if (typeof id !== "string") throw new Error("Expected an event id");
+    return id;
+  });
+}
+
+function firstCall(calls: readonly HttpCall[]): HttpCall {
+  const call = calls[0];
+  assert.ok(call);
+  return call;
+}
+
+function secondCall(calls: readonly HttpCall[]): HttpCall {
+  const call = calls[1];
+  assert.ok(call);
+  return call;
 }
 
 describe("sync manager", { concurrency: false }, () => {
@@ -151,7 +214,7 @@ describe("sync manager", { concurrency: false }, () => {
       ]);
       assert.ok(http.calls.indexOf(put) < http.calls.indexOf(post));
 
-      assert.equal((await store.loadGame(GAME_ID)).synced, true);
+      assert.equal((await loadGame(store, GAME_ID)).synced, true);
       const events = await store.loadGameEvents(GAME_ID);
       assert.deepEqual(
         events.map((event) => event.synced),
@@ -186,7 +249,7 @@ describe("sync manager", { concurrency: false }, () => {
       assert.equal(result.ok, false);
       assert.equal(puts(http.calls).length, 1);
       assert.equal(posts(http.calls).length, 1);
-      assert.equal((await store.loadGame(GAME_ID)).synced, true);
+      assert.equal((await loadGame(store, GAME_ID)).synced, true);
       assert.deepEqual(await store.pendingEventIds(GAME_ID), [score.id, turnover.id]);
 
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -258,7 +321,7 @@ describe("sync manager", { concurrency: false }, () => {
 
       const refused = await manager.syncNow();
       assert.equal(refused.ok, false);
-      assert.equal((await store.loadGame(GAME_ID)).synced, false);
+      assert.equal((await loadGame(store, GAME_ID)).synced, false);
       assert.deepEqual(await store.pendingEventIds(GAME_ID), [score.id]);
       // The pass stops there rather than looping, and the game is not re-PUT
       // inside the pass that released it.
@@ -269,7 +332,7 @@ describe("sync manager", { concurrency: false }, () => {
       assert.equal(retried.ok, true);
       assert.equal(puts(http.calls).length, 1);
       assert.equal(posts(http.calls).length, 2);
-      assert.equal((await store.loadGame(GAME_ID)).synced, true);
+      assert.equal((await loadGame(store, GAME_ID)).synced, true);
       assert.deepEqual(await store.pendingEventIds(GAME_ID), []);
     }));
 
@@ -331,10 +394,7 @@ describe("sync manager", { concurrency: false }, () => {
       await manager.syncNow();
 
       assert.equal(posts(http.calls).length, 1);
-      assert.deepEqual(
-        posts(http.calls)[0].body.map((event) => event.id),
-        [pending.id, later.id],
-      );
+      assert.deepEqual(eventIds(firstCall(posts(http.calls)).body), [pending.id, later.id]);
       const events = await store.loadGameEvents(GAME_ID);
       assert.equal(events[0].points, 2);
       assert.deepEqual(
@@ -383,15 +443,16 @@ describe("sync manager", { concurrency: false }, () => {
         http.calls.map((call) => call.method),
         ["PUT", "PUT", "POST", "POST"],
       );
-      assert.deepEqual(
-        posts(http.calls)[0].body.map((event) => event.id),
-        [first.id, second.id, third.id],
-      );
+      assert.deepEqual(eventIds(firstCall(posts(http.calls)).body), [
+        first.id,
+        second.id,
+        third.id,
+      ]);
       assert.equal(posts(http.calls)[0].url, `/api/games/${GAME_ID}/events/sync`);
-      assert.deepEqual(
-        posts(http.calls)[1].body.map((event) => event.id),
-        [otherScore.id, otherRebound.id],
-      );
+      assert.deepEqual(eventIds(secondCall(posts(http.calls)).body), [
+        otherScore.id,
+        otherRebound.id,
+      ]);
       assert.equal(posts(http.calls)[1].url, `/api/games/${OTHER_GAME_ID}/events/sync`);
       assert.equal(otherScore.points, 3);
       assert.deepEqual(await store.pendingEventIds(GAME_ID), []);
@@ -442,7 +503,7 @@ describe("sync manager", { concurrency: false }, () => {
       assert.equal(secondResult.ok, true);
       assert.equal(maxActive, 1);
       assert.deepEqual(
-        posts(http.calls).map((call) => call.body.map((event) => event.id)),
+        posts(http.calls).map((call) => eventIds(call.body)),
         [[first.id], [during.id]],
       );
       assert.deepEqual(await store.pendingEventIds(GAME_ID), []);
@@ -531,10 +592,14 @@ describe("sync manager", { concurrency: false }, () => {
       await running;
 
       const events = await store.loadGameEvents(GAME_ID);
-      assert.equal(events.find((event) => event.id === first.id).synced, true);
-      assert.equal(events.find((event) => event.id === first.id).points, 2);
-      assert.equal(events.find((event) => event.id === during.id).synced, false);
-      assert.equal(events.find((event) => event.id === during.id).points, 3);
+      const firstStored = events.find((event) => event.id === first.id);
+      const duringStored = events.find((event) => event.id === during.id);
+      assert.ok(firstStored);
+      assert.ok(duringStored);
+      assert.equal(firstStored.synced, true);
+      assert.equal(firstStored.points, 2);
+      assert.equal(duringStored.synced, false);
+      assert.equal(duringStored.points, 3);
       assert.equal(computeStats(events).points, 5);
     }));
 
@@ -567,9 +632,10 @@ describe("sync manager", { concurrency: false }, () => {
 
       assert.equal(result.ok, false);
       assert.equal(puts(http.calls).length, 1);
-      assert.equal(puts(http.calls)[0].body.opponent, "Novi Ligure");
+      assert.equal(objectBody(firstCall(puts(http.calls)).body).opponent, "Novi Ligure");
       assert.equal(posts(http.calls).length, 0);
       const stored = await store.loadGame(GAME_ID);
+      assert.ok(stored);
       assert.equal(stored.opponent_name, "Alba");
       assert.equal(stored.synced, false);
       assert.equal((await store.pendingEventIds(GAME_ID)).length, 1);
@@ -772,8 +838,8 @@ describe("sync manager", { concurrency: false }, () => {
 
     const blocked = deferred();
     let posted = false;
-    const calls = [];
-    const fetchA = async (url, options = {}) => {
+    const calls: Array<{ tab: "A" | "B"; method: string | undefined; url: string }> = [];
+    const fetchA = async (url: string | URL | Request, options: RequestInit = {}) => {
       if (options.method === "POST") {
         posted = true;
         await blocked.opened;
@@ -782,7 +848,7 @@ describe("sync manager", { concurrency: false }, () => {
       if (options.method === "DELETE") return new Response(null, { status: 204 });
       return Response.json({ synced: 1 }, { status: 200 });
     };
-    const fetchB = async (url, options = {}) => {
+    const fetchB = async (url: string | URL | Request, options: RequestInit = {}) => {
       calls.push({ tab: "B", method: options.method, url: String(url) });
       return new Response(null, { status: 204 });
     };
@@ -834,7 +900,7 @@ describe("sync manager", { concurrency: false }, () => {
     const blocked = deferred();
     let posted = false;
     let deletesFromA = 0;
-    const fetchA = async (_url, options = {}) => {
+    const fetchA = async (_url: string | URL | Request, options: RequestInit = {}) => {
       if (options.method === "POST") {
         posted = true;
         await blocked.opened;
