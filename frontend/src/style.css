@@ -888,15 +888,13 @@ a {
     flex-basis: 40px;
   }
 
-  .club-mark--small {
+  .club-mark-small {
     width: 50%;
   }
 
   .dashboard-home {
     padding: 8px;
     font-size: 0.68rem;
-    margin-bottom: 10px;
-    float: right;
   }
 
   .trend-grid {

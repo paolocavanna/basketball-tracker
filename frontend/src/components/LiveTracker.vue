@@ -141,7 +141,9 @@ watch(
 
   <section v-else class="bench">
     <header class="top">
-      <img class="club-mark" src="/campus-monferrato.png" :alt="text.brand.team" />
+      <a href="/" @click.prevent="$emit('navigate', '/')">
+        <img class="club-mark" src="/campus-monferrato.png" :alt="text.brand.team" />
+      </a>
       <p class="opponent">vs {{ game?.opponent_name || text.tracker.live }}</p>
       <p
         class="sync-pill"
