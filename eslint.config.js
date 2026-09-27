@@ -32,9 +32,10 @@ export default [
       "no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
     },
   },
-  // Node: schema setup script and the test runner.
+  // Node: schema setup script, the test runner, and the local API the dev
+  // server mounts in place of the Pages Functions.
   {
-    files: ["scripts/**/*.mjs", "tests/**/*.mjs", "eslint.config.js"],
+    files: ["scripts/**/*.mjs", "tests/**/*.mjs", "eslint.config.js", "frontend/dev/**/*.js"],
     languageOptions: { globals: globals.node },
   },
   // Cloudflare Pages Functions and the shared lib/ helpers run on the workers
