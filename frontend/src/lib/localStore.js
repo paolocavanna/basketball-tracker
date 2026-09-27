@@ -181,6 +181,19 @@ export function createLocalStore({ indexedDB, IDBKeyRange: keyRange } = {}) {
       });
     },
 
+    // The inverse of markGameSynced, for when the server turns out not to have
+    // the row after all: a wiped database, a restore from backup. The game goes
+    // back in the queue so the next pass PUTs it again.
+    markGamePending(id) {
+      return write(GAMES, async (store) => {
+        const game = await onOptional(store.get(id));
+        if (!game) return false;
+        if (!game.synced) return true;
+        await onDone(store.put({ ...game, synced: false }));
+        return true;
+      });
+    },
+
     // A local write always leaves the record queued: anything written here has
     // to reach the server, whether it is a fresh tap or a correction.
     saveEvent(event) {

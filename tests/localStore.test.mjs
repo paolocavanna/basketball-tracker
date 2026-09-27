@@ -343,6 +343,33 @@ describe("sync state", () => {
       assert.deepEqual(await store.pendingGames(), []);
     }));
 
+  it("queues a synced game again when the server turns out to have lost it", () =>
+    withStore(async (store) => {
+      const saved = await store.saveGame({
+        id: GAME_ID,
+        team_id: 1,
+        date: "2026-10-04",
+        opponent_name: "Novi Ligure",
+        created_at: "2026-10-04T18:00:00.000Z",
+      });
+      await store.markGameSynced(GAME_ID, saved);
+      assert.deepEqual(await store.pendingGames(), []);
+
+      assert.equal(await store.markGamePending(crypto.randomUUID()), false);
+      assert.equal(await store.markGamePending(GAME_ID), true);
+
+      const queued = await store.pendingGames();
+      assert.deepEqual(
+        queued.map((game) => game.id),
+        [GAME_ID],
+      );
+      // The rest of the row is untouched, so the next PUT uploads the same game.
+      assert.equal(queued[0].opponent_name, "Novi Ligure");
+      assert.equal(queued[0].created_at, "2026-10-04T18:00:00.000Z");
+      // Already queued, so there is nothing to change and no second write.
+      assert.equal(await store.markGamePending(GAME_ID), true);
+    }));
+
   it("keeps each game's queue separate", () =>
     withStore(async (store) => {
       const ours = await tap(store, GAME_ID, "SCORE", 2, 1);

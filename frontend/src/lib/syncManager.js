@@ -8,6 +8,8 @@
 // A failed pass clears that follow-up. It does not schedule its own retry.
 // The next online event, idle callback, or 10s tick is what tries again.
 // Uploads are idempotent: a later pass may resend the same client ids.
+// A 404 on a batch means the server has lost that game, so it goes back in the
+// queue and the next pass recreates it before retrying the events.
 
 const INTERVAL_MS = 10_000;
 const JSON_HEADERS = { "Content-Type": "application/json" };
@@ -94,11 +96,14 @@ export function createSyncManager({
     idleMode = null;
   }
 
+  // A rejected fetch and a 500 are both just a failed request for the pass, so
+  // send hands back the response and lets each caller judge it. The caller that
+  // needs to know why asks for the status.
   async function send(url, options) {
     try {
-      return accepted(await fetchImpl(url, options));
+      return await fetchImpl(url, options);
     } catch {
-      return false;
+      return null;
     }
   }
 
@@ -111,7 +116,7 @@ export function createSyncManager({
         headers: JSON_HEADERS,
         body: JSON.stringify(apiGame(game)),
       });
-      if (!sent) {
+      if (!accepted(sent)) {
         ok = false;
         continue;
       }
@@ -148,7 +153,12 @@ export function createSyncManager({
         headers: JSON_HEADERS,
         body: JSON.stringify(liveBatch.map(apiEvent)),
       });
-      if (!sent) {
+      if (!accepted(sent)) {
+        // A 404 means this device's `synced` flag has outlived the row, so the
+        // batch can never land while the game is trusted. The game goes back in
+        // the queue and the next pass PUTs it before retrying the events. Any
+        // other failure is a transient one and leaves the game alone.
+        if (sent?.status === 404) await store.markGamePending(gameId);
         ok = false;
         continue;
       }
@@ -177,7 +187,7 @@ export function createSyncManager({
       const sent = await send(`/api/events/${encodeURIComponent(id)}`, {
         method: "DELETE",
       });
-      if (!sent) {
+      if (!accepted(sent)) {
         ok = false;
         continue;
       }

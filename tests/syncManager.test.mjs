@@ -230,6 +230,49 @@ describe("sync manager", { concurrency: false }, () => {
       assert.deepEqual(await store.pendingEventIds(GAME_ID), []);
     }));
 
+  it("re-uploads a game the server has lost, then retries its events", () =>
+    withStore(async (store) => {
+      await store.saveGame(game(GAME_ID, "Novi Ligure"));
+      // Synced from this device, and then the row went: a wiped database, a
+      // restore from backup. The flag says otherwise, so the batch is refused.
+      await store.markGameSynced(GAME_ID);
+      const score = await store.saveEvent({
+        game_id: GAME_ID,
+        type: "SCORE",
+        points: 3,
+        created_at: at(1),
+      });
+
+      const stored = new Set();
+      const http = recorded((call) => {
+        if (call.method === "PUT") {
+          stored.add(GAME_ID);
+          return accepted(call);
+        }
+        if (!stored.has(GAME_ID)) {
+          return Response.json({ error: "Game not found" }, { status: 404 });
+        }
+        return accepted(call);
+      });
+      const manager = createSyncManager({ store, fetch: http.fetch });
+
+      const refused = await manager.syncNow();
+      assert.equal(refused.ok, false);
+      assert.equal((await store.loadGame(GAME_ID)).synced, false);
+      assert.deepEqual(await store.pendingEventIds(GAME_ID), [score.id]);
+      // The pass stops there rather than looping, and the game is not re-PUT
+      // inside the pass that released it.
+      assert.equal(posts(http.calls).length, 1);
+      assert.equal(puts(http.calls).length, 0);
+
+      const retried = await manager.syncNow();
+      assert.equal(retried.ok, true);
+      assert.equal(puts(http.calls).length, 1);
+      assert.equal(posts(http.calls).length, 2);
+      assert.equal((await store.loadGame(GAME_ID)).synced, true);
+      assert.deepEqual(await store.pendingEventIds(GAME_ID), []);
+    }));
+
   it("does not send a batch that was already synchronized", () =>
     withStore(async (store) => {
       await store.saveGame(game(GAME_ID, "Novi Ligure"));
