@@ -436,6 +436,8 @@ a {
   font-weight: 750;
   text-decoration: none;
   white-space: nowrap;
+  margin-bottom: 10px;
+  float: right;
 }
 
 .dashboard-home span {
