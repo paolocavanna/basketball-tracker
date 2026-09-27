@@ -460,6 +460,10 @@ a {
   font-weight: 700;
 }
 
+.logo-wrapper {
+  flex-basis: min-content;
+}
+
 .season-section {
   padding-block: 24px 28px;
 }

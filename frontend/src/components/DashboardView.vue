@@ -130,7 +130,7 @@ function possessionTitle(index, possession) {
       >{{ text.dashboard.backToTracker }} <span aria-hidden="true">↗</span></a
     >
     <header class="dashboard-header">
-      <a href="/" @click.prevent="$emit('navigate', '/')">
+      <a href="/" class="logo-wrapper" @click.prevent="$emit('navigate', '/')">
         <img
           class="club-mark club-mark-small"
           src="/campus-monferrato.png"
