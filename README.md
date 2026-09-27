@@ -1,4 +1,4 @@
-# basketball-tracker
+# Basketball tracker
 
 ## Local development
 
