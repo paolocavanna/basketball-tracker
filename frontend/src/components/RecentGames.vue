@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import text from "../text/en.json";
-import { formatGameDate, recentGames, recoveryAction, recoveryPath } from "../lib/gameLifecycle.ts";
+import {
+  formatGameDate,
+  gameResult,
+  recentGames,
+  recoveryAction,
+  recoveryPath,
+  resultLabel,
+  type GameResult,
+} from "../lib/gameLifecycle.ts";
 import { gameStatus } from "../lib/localStore.ts";
 import type { LocalStore } from "../lib/localStore.ts";
 import type { StoredGame } from "../../../types.ts";
@@ -30,6 +38,17 @@ function scoreLine(game: StoredGame): string {
   return `${game.final_score_for}-${game.final_score_against}`;
 }
 
+function savedResult(game: StoredGame): GameResult | null {
+  if (game.final_scores_confirmed !== true) return null;
+  return gameResult(game.final_score_for, game.final_score_against);
+}
+
+function winnerLine(game: StoredGame): string {
+  const result = savedResult(game);
+  if (!result) return "";
+  return resultLabel(result, game.opponent_name, text.result);
+}
+
 function open(game: StoredGame): void {
   emit("navigate", recoveryPath(game));
 }
@@ -44,6 +63,13 @@ function open(game: StoredGame): void {
           <p class="recent-opponent">{{ text.recent.vs }} {{ game.opponent_name }}</p>
           <p class="recent-meta">{{ formatGameDate(game.date) }} · {{ statusLabel(game) }}</p>
           <p v-if="scoreLine(game)" class="recent-score">{{ scoreLine(game) }}</p>
+          <p
+            v-if="winnerLine(game)"
+            class="recent-result game-result"
+            :class="`game-result-${savedResult(game)}`"
+          >
+            {{ winnerLine(game) }}
+          </p>
         </div>
         <button
           type="button"

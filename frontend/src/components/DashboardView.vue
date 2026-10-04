@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import text from "../text/en.json";
 import RecentGames from "./RecentGames.vue";
 import type { LocalStore } from "../lib/localStore.ts";
+import { gameResult, resultLabel } from "../lib/gameLifecycle.ts";
 import { SEEDED_TEAM_ID, loadTeamId } from "../lib/team.ts";
 import { readGameDetail, readSeasonSummary } from "../lib/api.ts";
 import {
@@ -34,6 +35,17 @@ const detailError = ref("");
 const teamId = ref(SEEDED_TEAM_ID);
 
 const selectedSummary = computed(() => games.value.find((game) => game.id === selectedId.value));
+const selectedResult = computed(() => {
+  const game = selectedSummary.value;
+  if (!game) return null;
+  return gameResult(game.final_score_for, game.final_score_against);
+});
+const selectedResultText = computed(() => {
+  const game = selectedSummary.value;
+  const result = selectedResult.value;
+  if (!game || !result) return "";
+  return resultLabel(result, game.opponent_name, text.result);
+});
 const firstGame = computed(() => games.value[0] ?? null);
 const latestGame = computed(() => games.value.at(-1) ?? null);
 
@@ -340,9 +352,18 @@ function possessionTitle(index: number, possession: Possession): string {
                 <p class="eyebrow">{{ formatDate(selectedSummary.date) }}</p>
                 <h2>{{ text.dashboard.vs }} {{ selectedSummary.opponent_name }}</h2>
               </div>
-              <div v-if="selectedSummary.final_score_for != null" class="final-score">
-                {{ selectedSummary.final_score_for }}<span>–</span
-                >{{ selectedSummary.final_score_against }}
+              <div v-if="selectedSummary.final_score_for != null" class="final-score-block">
+                <div class="final-score">
+                  {{ selectedSummary.final_score_for }}<span>-</span
+                  >{{ selectedSummary.final_score_against }}
+                </div>
+                <p
+                  v-if="selectedResultText"
+                  class="game-result"
+                  :class="`game-result-${selectedResult}`"
+                >
+                  {{ selectedResultText }}
+                </p>
               </div>
             </div>
             <div class="game-stat-grid">

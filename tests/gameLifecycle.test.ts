@@ -3,12 +3,14 @@ import { describe, it } from "node:test";
 import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 import {
   applyFinishChoice,
-  parseOpponentScore,
+  gameResult,
+  parseFinalScore,
   persistDerivedScore,
   recentGames,
   recoveryAction,
   recoveryPath,
-  saveOpponentScore,
+  resultLabel,
+  saveFinalScores,
 } from "../frontend/src/lib/gameLifecycle.ts";
 import { createLocalStore } from "../frontend/src/lib/localStore.ts";
 import type { LocalStore } from "../frontend/src/lib/localStore.ts";
@@ -160,36 +162,75 @@ describe("recovery", () => {
 });
 
 describe("corrections after finishing", () => {
-  it("accepts only a whole opponent score and keeps the latest correction", () =>
+  it("saves both final scores, names the winner, and keeps that result when the log changes", () =>
     withStore(async (store) => {
-      assert.equal(parseOpponentScore(""), null);
-      assert.equal(parseOpponentScore("8.5"), null);
-      assert.equal(parseOpponentScore("-1"), null);
-      assert.equal(parseOpponentScore("1000"), null);
-      assert.equal(parseOpponentScore("08"), null);
-      assert.equal(parseOpponentScore("0"), 0);
-      assert.equal(parseOpponentScore(" 12 "), 12);
+      assert.equal(parseFinalScore(""), null);
+      assert.equal(parseFinalScore("8.5"), null);
+      assert.equal(parseFinalScore("-1"), null);
+      assert.equal(parseFinalScore("1000"), null);
+      assert.equal(parseFinalScore("08"), null);
+      assert.equal(parseFinalScore("0"), 0);
+      assert.equal(parseFinalScore(" 12 "), 12);
+      assert.equal(gameResult(61, 39), "win");
+      assert.equal(gameResult(39, 61), "loss");
+      assert.equal(gameResult(40, 40), "draw");
+      assert.equal(gameResult(null, 10), null);
+      assert.equal(
+        resultLabel("loss", "Novara", {
+          campusWon: "Campus won",
+          opponentWon: "{opponent} won",
+          draw: "Draw",
+        }),
+        "Novara won",
+      );
 
-      const game = await saveGame(store, GAME_ID, "Novi Ligure", "2026-10-04T18:00:00.000Z");
+      const game = await saveGame(store, GAME_ID, "Novara", "2026-10-04T18:00:00.000Z");
       await score(store, GAME_ID, 2);
       const events = await store.loadGameEvents(GAME_ID);
       const finished = await applyFinishChoice(store, "confirm", game, events);
-      const first = await saveOpponentScore(store, finished, events, "40");
+      const first = await saveFinalScores(store, finished, events, "61", "39");
       assert.equal(first.ok, true);
       if (!first.ok) return;
-      assert.equal(first.game.final_score_against, 40);
+      assert.equal(first.game.final_score_for, 61);
+      assert.equal(first.game.final_score_against, 39);
+      assert.equal(first.game.final_scores_confirmed, true);
       assert.equal(first.game.status, "finished");
+      assert.equal(gameResult(first.game.final_score_for, first.game.final_score_against), "win");
 
-      const second = await saveOpponentScore(store, first.game, events, "42");
+      const second = await saveFinalScores(store, first.game, events, "39", "61");
       assert.equal(second.ok, true);
       if (!second.ok) return;
-      assert.equal(second.game.final_score_against, 42);
-      assert.equal(second.game.final_score_for, 2);
+      assert.equal(second.game.final_score_for, 39);
+      assert.equal(second.game.final_score_against, 61);
+      assert.equal(
+        gameResult(second.game.final_score_for, second.game.final_score_against),
+        "loss",
+      );
 
-      const invalid = await saveOpponentScore(store, second.game, events, "nope");
+      const tied = await saveFinalScores(store, second.game, events, "40", "40");
+      assert.equal(tied.ok, true);
+      if (!tied.ok) return;
+      assert.equal(gameResult(tied.game.final_score_for, tied.game.final_score_against), "draw");
+
+      const invalid = await saveFinalScores(store, tied.game, events, "61", "nope");
       assert.equal(invalid.ok, false);
-      assert.equal((await store.loadGame(GAME_ID))?.final_score_against, 42);
-      assert.equal((await store.loadGameEvents(GAME_ID)).length, 1);
+      const stored = await store.loadGame(GAME_ID);
+      assert.ok(stored);
+      assert.equal(stored.final_score_for, 40);
+      assert.equal(stored.final_score_against, 40);
+
+      await store.saveEvent({
+        game_id: GAME_ID,
+        type: "SCORE",
+        points: 3,
+        created_at: "2026-10-04T18:06:00.000Z",
+      });
+      const kept = await persistDerivedScore(store, stored, await store.loadGameEvents(GAME_ID));
+      assert.ok(kept);
+      assert.equal(kept.final_score_for, 40);
+      assert.equal(kept.final_score_against, 40);
+      assert.equal(kept.final_scores_confirmed, true);
+      assert.equal((await store.loadGameEvents(GAME_ID)).length, 2);
     }));
 
   it("lets the coach add and undo events without leaving the finished state", () =>
