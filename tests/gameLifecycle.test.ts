@@ -7,7 +7,6 @@ import {
   parseFinalScore,
   persistDerivedScore,
   recentGames,
-  recoveryAction,
   recoveryPath,
   resultLabel,
   saveFinalScores,
@@ -15,7 +14,7 @@ import {
 import { createLocalStore } from "../frontend/src/lib/localStore.ts";
 import type { LocalStore } from "../frontend/src/lib/localStore.ts";
 import { gameStatus } from "../frontend/src/lib/localStore.ts";
-import { livePath, summaryPath } from "../frontend/src/lib/route.ts";
+import { summaryPath } from "../frontend/src/lib/route.ts";
 import { computeStats } from "../frontend/src/lib/stats.ts";
 import { createSyncManager } from "../frontend/src/lib/syncManager.ts";
 import type { StoredEvent, StoredGame } from "../types.ts";
@@ -90,8 +89,7 @@ describe("finish confirmation", () => {
       assert.deepEqual(kept, await store.loadGame(GAME_ID));
       assert.deepEqual(eventShape(await store.loadGameEvents(GAME_ID)), eventShape(beforeEvents));
       assert.equal((await store.loadGameEvents(GAME_ID))[0]?.id, event.id);
-      assert.equal(recoveryAction(kept), "continue");
-      assert.equal(recoveryPath(kept), livePath(GAME_ID));
+      assert.deepEqual(recentGames(await store.listGames()), []);
     }));
 
   it("marks the game finished and keeps every event when the coach confirms", () =>
@@ -115,33 +113,32 @@ describe("finish confirmation", () => {
       assert.deepEqual(await store.loadGame(GAME_ID), finished);
       assert.deepEqual(eventShape(afterEvents), eventShape(beforeEvents));
       assert.equal(afterEvents.filter((row) => row.deleted).length, 1);
-      assert.equal(recoveryAction(finished), "open");
-      assert.notEqual(recoveryAction(finished), "continue");
       assert.equal(recoveryPath(finished), summaryPath(GAME_ID));
+      assert.deepEqual(
+        recentGames(await store.listGames()).map((row) => row.id),
+        [GAME_ID],
+      );
     }));
 });
 
 describe("recovery", () => {
-  it("keeps a finished game discoverable beside an in-progress game", () =>
+  it("lists a finished game and leaves an in-progress game off the list", () =>
     withStore(async (store) => {
       const older = await saveGame(store, GAME_ID, "Novi Ligure", "2026-10-04T18:00:00.000Z");
       await score(store, GAME_ID, 2);
       await applyFinishChoice(store, "confirm", older, await store.loadGameEvents(GAME_ID));
       await saveGame(store, OTHER_GAME_ID, "Alba", "2026-10-05T18:00:00.000Z");
 
-      const listed = recentGames(await store.listGames());
+      const stored = await store.listGames();
+      assert.deepEqual(stored.map((game) => game.id).sort(), [GAME_ID, OTHER_GAME_ID].sort());
+      const listed = recentGames(stored);
       assert.deepEqual(
         listed.map((game) => game.id),
-        [OTHER_GAME_ID, GAME_ID],
+        [GAME_ID],
       );
-      const finished = listed.find((game) => game.id === GAME_ID);
-      const active = listed.find((game) => game.id === OTHER_GAME_ID);
+      const finished = listed[0];
       assert.ok(finished);
-      assert.ok(active);
-      assert.equal(recoveryAction(finished), "open");
       assert.equal(recoveryPath(finished), summaryPath(GAME_ID));
-      assert.equal(recoveryAction(active), "continue");
-      assert.equal(recoveryPath(active), livePath(OTHER_GAME_ID));
     }));
 
   it("still has the finished game after the page is opened again", () =>
@@ -157,7 +154,7 @@ describe("recovery", () => {
       assert.equal(reloaded.status, "finished");
       assert.equal((await second.loadGameEvents(GAME_ID)).length, 1);
       assert.equal(recentGames(await second.listGames())[0]?.id, GAME_ID);
-      assert.equal(recoveryAction(reloaded), "open");
+      assert.equal(recoveryPath(reloaded), summaryPath(GAME_ID));
     }));
 });
 
@@ -291,6 +288,6 @@ describe("failed sync", () => {
       assert.deepEqual(eventShape(await store.loadGameEvents(GAME_ID)), eventShape(events));
       const listed = recentGames(await store.listGames());
       assert.equal(listed[0]?.id, GAME_ID);
-      assert.equal(recoveryAction(listed[0] ?? stored), "open");
+      assert.equal(recoveryPath(listed[0] ?? stored), summaryPath(GAME_ID));
     }));
 });

@@ -5,12 +5,10 @@ import {
   formatGameDate,
   gameResult,
   recentGames,
-  recoveryAction,
   recoveryPath,
   resultLabel,
   type GameResult,
 } from "../lib/gameLifecycle.ts";
-import { gameStatus } from "../lib/localStore.ts";
 import type { LocalStore } from "../lib/localStore.ts";
 import type { StoredGame } from "../../../types.ts";
 
@@ -27,10 +25,6 @@ onMounted(async () => {
     games.value = [];
   }
 });
-
-function statusLabel(game: StoredGame): string {
-  return gameStatus(game) === "finished" ? text.recent.finished : text.recent.inProgress;
-}
 
 function scoreLine(game: StoredGame): string {
   if (game.final_score_for == null) return "";
@@ -61,7 +55,7 @@ function open(game: StoredGame): void {
       <li v-for="game in games" :key="game.id">
         <div class="recent-copy">
           <p class="recent-opponent">{{ text.recent.vs }} {{ game.opponent_name }}</p>
-          <p class="recent-meta">{{ formatGameDate(game.date) }} · {{ statusLabel(game) }}</p>
+          <p class="recent-meta">{{ formatGameDate(game.date) }} · {{ text.recent.finished }}</p>
           <p v-if="scoreLine(game)" class="recent-score">{{ scoreLine(game) }}</p>
           <p
             v-if="winnerLine(game)"
@@ -71,15 +65,8 @@ function open(game: StoredGame): void {
             {{ winnerLine(game) }}
           </p>
         </div>
-        <button
-          type="button"
-          class="recent-action"
-          :class="recoveryAction(game) === 'continue' ? 'recent-continue' : 'recent-open'"
-          @click="open(game)"
-        >
-          {{
-            recoveryAction(game) === "continue" ? text.recent.continueGame : text.recent.openGame
-          }}
+        <button type="button" class="recent-action recent-open" @click="open(game)">
+          {{ text.recent.openGame }}
         </button>
       </li>
     </ul>

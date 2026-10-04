@@ -179,13 +179,13 @@ Routes are already team-scoped internally (`teamId` is threaded through every AP
 - **End game button** always visible, labeled with the words "End game" while the game is in progress. This is how a person finishes the live screen. The browser Back button is not the way to end a game, and the Pending sync status is not a reason to stay.
 - Tapping End game opens a short confirmation. Cancel leaves the game in progress. Confirm marks it finished, keeps every recorded event, saves that finished state and the team's score locally, and opens the post-game summary. It does not wait for the network or for sync to finish. Uploads that are still pending keep running.
 - The summary shows the team's points and stats and lets the coach enter or correct the opponent's final score. From the summary the coach can reopen the live log or return to the start screen. Opening `/game/:id/live` for a finished game still shows the log and still accepts corrections.
-- The start screen lists recent games stored on this device. An in-progress game has Continue. A finished game stays on that list and on the dashboard, labeled finished, with Open. Finding it does not require the game URL or a successful sync.
+- The start screen lists finished games stored on this device, labeled finished, with Open. The same list is on the dashboard. An in-progress game is not listed and has no resume action. Finding a finished game does not require the game URL or a successful sync. Refreshing the live page you are already on still loads that game.
 - No page reloads.
 
 ### Dashboard (`/dashboard`)
 - **Per-game view:** pick a game, see its stat line + a simple bar/line chart of possession-by-possession PPP.
 - **Season/trend view:** line charts of PPP, TOV, reb rates across all games in chronological order, so you can see whether the team is trending up.
-- Games stored on this device are listed above the season view, with Continue for an in-progress game and Open for a finished one. That list is local, so it remains when the season request fails.
+- Finished games stored on this device are listed above the season view, with Open. An in-progress game is not listed. That list is local, so it remains when the season request fails.
 
 ## 9. Deployment plan
 
@@ -237,7 +237,7 @@ Not committed to — U13 is the only team that exists right now — but the sche
 The following five product suggestions are listed separately for review. Where they conflict with the earlier End game behavior in §8, this section takes precedence.
 
 1. **Complete a game with a post-game flow.** End game should open a short summary showing the team's recorded points and game stats, and let the coach enter the opponent's final score. A game should have an explicit in-progress or finished state. Save its finished state and score locally without waiting for sync. From the summary, the coach can return to the start screen or reopen the game to correct its event log or final score. Corrections remain possible after finishing.
-2. **Make in-progress games easy to resume.** List recent games on the start screen and provide a clear Continue action for in-progress games. This supports recovery after leaving the tracker or closing the page without requiring the game URL. Finished games remain discoverable from the dashboard.
+2. **Do not resume an in-progress game.** The start screen and the dashboard do not list a game that is still in progress, and they do not offer Continue. Leaving the live page is not a way back into that game. Finished games remain discoverable from the start screen and the dashboard.
 3. **Clarify season boundaries.** Do not silently combine games from different seasons in one trend view. Provide a way to select a season using an explicit definition the coach can understand. When only one season exists, keep the dashboard simple and avoid making selection an unnecessary step.
 4. **Use comparable trend measures.** Show turnovers and offensive/defensive rebounds as counts per 10 of the team's possessions, so game-to-game trends remain comparable when games have different numbers of possessions. Label these as per-10-possession rates, not percentages. The tracked events do not include opponent rebound opportunities, so a true rebound percentage is unavailable.
-5. **Protect against accidental game endings.** Finishing asks for one lightweight confirmation before the game is marked finished. Cancel leaves it in progress. Confirm keeps the event log. Continue and Open on the start screen, and Open on the dashboard, are the way back in, including after a refresh or a failed sync.
+5. **Protect against accidental game endings.** Finishing asks for one lightweight confirmation before the game is marked finished. Cancel leaves it in progress. Confirm keeps the event log. Open on the start screen and the dashboard is the way back to a finished game, including after a refresh or a failed sync.

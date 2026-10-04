@@ -120,8 +120,8 @@ async function saveScore(): Promise<void> {
   <section v-else-if="!finished" class="bench bench-message">
     <h1>{{ text.summary.inProgress }}</h1>
     <p>{{ text.recent.vs }} {{ game.opponent_name }}</p>
-    <button type="button" class="start" @click="emit('navigate', livePath(gameId))">
-      {{ text.recent.continueGame }}
+    <button type="button" class="summary-done" @click="emit('navigate', '/')">
+      {{ text.summary.backToStart }}
     </button>
   </section>
 

@@ -1,7 +1,7 @@
 import type { GameRecord, StoredEvent, StoredGame } from "../../../types.ts";
 import { gameStatus } from "./localStore.ts";
 import type { LocalStore } from "./localStore.ts";
-import { livePath, summaryPath } from "./route.ts";
+import { summaryPath } from "./route.ts";
 import { computeStats } from "./stats.ts";
 
 export const RECENT_GAME_LIMIT = 8;
@@ -10,20 +10,17 @@ export const RECENT_GAME_LIMIT = 8;
 // stay invalid so a slip does not wipe a result that was already saved.
 const FINAL_SCORE = /^(0|[1-9]\d{0,2})$/;
 
+// Finished games only. An in-progress game stays on the live page and is not
+// listed, so leaving that page does not offer a way back in.
 export function recentGames(games: readonly StoredGame[], limit = RECENT_GAME_LIMIT): StoredGame[] {
   return [...games]
+    .filter((game) => gameStatus(game) === "finished")
     .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id))
     .slice(0, limit);
 }
 
-export type RecoveryAction = "continue" | "open";
-
-export function recoveryAction(game: Pick<GameRecord, "status">): RecoveryAction {
-  return gameStatus(game) === "finished" ? "open" : "continue";
-}
-
-export function recoveryPath(game: Pick<GameRecord, "id" | "status">): string {
-  return recoveryAction(game) === "continue" ? livePath(game.id) : summaryPath(game.id);
+export function recoveryPath(game: Pick<GameRecord, "id">): string {
+  return summaryPath(game.id);
 }
 
 export function formatGameDate(date: string): string {
