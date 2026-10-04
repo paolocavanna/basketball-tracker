@@ -8,6 +8,7 @@ import {
   persistDerivedScore,
   recentGames,
   recoveryPath,
+  capitalizedOpponent,
   resultLabel,
   saveFinalScores,
 } from "../frontend/src/lib/gameLifecycle.ts";
@@ -180,6 +181,10 @@ describe("corrections after finishing", () => {
         }),
         "Novara won",
       );
+      assert.equal(capitalizedOpponent("novara basket"), "Novara Basket");
+      assert.equal(capitalizedOpponent("Novara"), "Novara");
+      assert.equal(capitalizedOpponent("nOVARA"), "NOVARA");
+      assert.equal(capitalizedOpponent("de faveri"), "De Faveri");
 
       const game = await saveGame(store, GAME_ID, "Novara", "2026-10-04T18:00:00.000Z");
       await score(store, GAME_ID, 2);

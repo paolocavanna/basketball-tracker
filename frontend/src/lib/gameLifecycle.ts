@@ -94,6 +94,17 @@ export function resultLabel(
   return copy.opponentWon.replace("{opponent}", opponentName);
 }
 
+// Same result as CSS `text-transform: capitalize`: the first letter of each
+// word is uppercased and the rest is left as stored. The dashboard select
+// needs this in the option text because a native picker, including Firefox
+// on Android, paints that text and ignores text-transform.
+export function capitalizedOpponent(name: string): string {
+  return name.replace(
+    /(^|\s)(\p{L})/gu,
+    (_match, lead: string, letter: string) => lead + letter.toUpperCase(),
+  );
+}
+
 export async function saveFinalScores(
   store: Pick<LocalStore, "saveGame">,
   game: StoredGame,

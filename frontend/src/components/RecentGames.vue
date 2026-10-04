@@ -17,6 +17,7 @@ const props = defineProps<{ store: LocalStore }>();
 const emit = defineEmits<{ navigate: [path: string] }>();
 
 const games = ref<StoredGame[]>([]);
+const opponentWonTail = text.result.opponentWon.replace("{opponent}", "");
 
 onMounted(async () => {
   try {
@@ -54,7 +55,10 @@ function open(game: StoredGame): void {
     <ul>
       <li v-for="game in games" :key="game.id">
         <div class="recent-copy">
-          <p class="recent-opponent">{{ text.recent.vs }} {{ game.opponent_name }}</p>
+          <p class="recent-opponent">
+            {{ text.recent.vs }}
+            <span class="opponent-name">{{ game.opponent_name }}</span>
+          </p>
           <p class="recent-meta">{{ formatGameDate(game.date) }} · {{ text.recent.finished }}</p>
           <p v-if="scoreLine(game)" class="recent-score">{{ scoreLine(game) }}</p>
           <p
@@ -62,7 +66,11 @@ function open(game: StoredGame): void {
             class="recent-result game-result"
             :class="`game-result-${savedResult(game)}`"
           >
-            {{ winnerLine(game) }}
+            <template v-if="savedResult(game) === 'loss'">
+              <span class="opponent-name">{{ game.opponent_name }}</span
+              >{{ opponentWonTail }}
+            </template>
+            <template v-else>{{ winnerLine(game) }}</template>
           </p>
         </div>
         <button type="button" class="recent-action recent-open" @click="open(game)">

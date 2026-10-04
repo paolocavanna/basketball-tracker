@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import text from "../text/en.json";
 import RecentGames from "./RecentGames.vue";
 import type { LocalStore } from "../lib/localStore.ts";
-import { gameResult, resultLabel } from "../lib/gameLifecycle.ts";
+import { capitalizedOpponent, gameResult } from "../lib/gameLifecycle.ts";
 import { SEEDED_TEAM_ID, loadTeamId } from "../lib/team.ts";
 import { readGameDetail, readSeasonSummary } from "../lib/api.ts";
 import {
@@ -40,12 +40,7 @@ const selectedResult = computed(() => {
   if (!game) return null;
   return gameResult(game.final_score_for, game.final_score_against);
 });
-const selectedResultText = computed(() => {
-  const game = selectedSummary.value;
-  const result = selectedResult.value;
-  if (!game || !result) return "";
-  return resultLabel(result, game.opponent_name, text.result);
-});
+const opponentWonTail = text.result.opponentWon.replace("{opponent}", "");
 const firstGame = computed(() => games.value[0] ?? null);
 const latestGame = computed(() => games.value.at(-1) ?? null);
 
@@ -325,7 +320,7 @@ function possessionTitle(index: number, possession: Possession): string {
             @change="selectGame(selectedId)"
           >
             <option v-for="game in [...games].reverse()" :key="game.id" :value="game.id">
-              {{ formatDate(game.date) }} · {{ game.opponent_name }}
+              {{ formatDate(game.date) }} · {{ capitalizedOpponent(game.opponent_name) }}
             </option>
           </select>
           <button
@@ -350,7 +345,10 @@ function possessionTitle(index: number, possession: Possession): string {
             <div class="game-detail-title">
               <div>
                 <p class="eyebrow">{{ formatDate(selectedSummary.date) }}</p>
-                <h2>{{ text.dashboard.vs }} {{ selectedSummary.opponent_name }}</h2>
+                <h2>
+                  {{ text.dashboard.vs }}
+                  <span class="opponent-name">{{ selectedSummary.opponent_name }}</span>
+                </h2>
               </div>
               <div v-if="selectedSummary.final_score_for != null" class="final-score-block">
                 <div class="final-score">
@@ -358,11 +356,18 @@ function possessionTitle(index: number, possession: Possession): string {
                   >{{ selectedSummary.final_score_against }}
                 </div>
                 <p
-                  v-if="selectedResultText"
+                  v-if="selectedResult"
                   class="game-result"
                   :class="`game-result-${selectedResult}`"
                 >
-                  {{ selectedResultText }}
+                  <template v-if="selectedResult === 'loss'">
+                    <span class="opponent-name">{{ selectedSummary.opponent_name }}</span
+                    >{{ opponentWonTail }}
+                  </template>
+                  <template v-else-if="selectedResult === 'win'">{{
+                    text.result.campusWon
+                  }}</template>
+                  <template v-else>{{ text.result.draw }}</template>
                 </p>
               </div>
             </div>
