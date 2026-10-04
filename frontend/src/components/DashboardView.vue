@@ -97,14 +97,16 @@ const possessions = computed<Possession[]>(() => {
   let current: Possession = { points: 0, offensiveRebounds: 0, result: "" };
   for (const event of selectedGame.value.events || []) {
     if (event.type === "OFF_REB") current.offensiveRebounds += 1;
-    if (event.type === "SCORE") current.points += Number(event.points || 0);
+    if (event.type === "FT" || event.type === "SCORE") {
+      current.points += Number(event.points || 0);
+    }
     if (["SCORE", "EMPTY", "TOV"].includes(event.type)) {
       current.result =
         event.type === "TOV"
           ? text.dashboard.turnover
-          : event.type === "EMPTY"
-            ? text.dashboard.empty
-            : `+${event.points}`;
+          : current.points > 0
+            ? `+${current.points}`
+            : text.dashboard.empty;
       result.push(current);
       current = { points: 0, offensiveRebounds: 0, result: "" };
     }

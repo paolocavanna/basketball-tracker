@@ -239,17 +239,25 @@ a {
   text-transform: uppercase;
 }
 
-/* Two columns keeps all six targets inside the thumb arc on a phone held in
-   one hand. Rows stretch to fill whatever height is left over. Undo and End
-   game sit under the last row, and the 56px floor keeps every stat target
-   well over the 44px minimum. */
+/* The three scoring buttons share the first row. EMPTY, TOV and the two
+   rebounds sit under them, two per row, so the free-throw button does not add
+   a row on a phone. Rows stretch to fill the height left above Undo and End
+   game. The 56px floor keeps every target over the 44px minimum. */
 .actions {
   display: grid;
   flex: 1 1 auto;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   grid-auto-rows: minmax(56px, 1fr);
   gap: var(--gap);
   min-height: 0;
+}
+
+.span-points {
+  grid-column: span 2;
+}
+
+.span-rest {
+  grid-column: span 3;
 }
 
 .action,
@@ -977,15 +985,8 @@ a {
   }
 }
 
-/* Tablet and desktop: three columns keeps the buttons chunky without turning
-   the row height up. A tall window gives End game its own full-width row
-   under Undo, so the way out of the game is a bar rather than half a row. */
-@media (width >= 600px) {
-  .actions {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
+/* A tall window gives End game its own full-width row under Undo, so the way
+   out of the game is a bar rather than half a row. */
 @media (height >= 640px) {
   .bench-footer {
     grid-template-columns: 1fr;
@@ -996,10 +997,10 @@ a {
   }
 }
 
-/* Landscape phone and any other short viewport: two rows of three, and a
-   shorter header, score and tally. The 44px floor still fits above Undo and
-   End game in a 320px-tall window, which is the shortest phone this screen
-   is aimed at. */
+/* Landscape phone and any other short viewport: one row of +1 +2 +3, then
+   one row of the other four, plus a shorter header, score and tally. The
+   44px floor still fits above Undo and End game in a 320px-tall window,
+   which is the shortest phone this screen is aimed at. */
 @media (height <= 560px) {
   .bench {
     gap: 4px;
@@ -1046,9 +1047,17 @@ a {
   }
 
   .actions {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(12, minmax(0, 1fr));
     grid-auto-rows: minmax(44px, 1fr);
     gap: 6px;
+  }
+
+  .span-points {
+    grid-column: span 4;
+  }
+
+  .span-rest {
+    grid-column: span 3;
   }
 
   .bench-footer {

@@ -37,6 +37,10 @@ function tap(store: LocalStore, gameId: string, type: EventType, points: number,
     if (points !== 2 && points !== 3) throw new Error("Score points must be 2 or 3");
     return store.saveEvent({ ...common, type, points });
   }
+  if (type === "FT") {
+    if (points !== 1) throw new Error("Free throw points must be 1");
+    return store.saveEvent({ ...common, type, points: 1 });
+  }
   return store.saveEvent({ ...common, type, points: 0 });
 }
 

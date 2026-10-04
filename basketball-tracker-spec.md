@@ -31,27 +31,28 @@ No opponent stats, no shot make/miss tracking (no FG%) — only what feeds posse
 - `games` — id, `team_id` (FK → `teams`), date, opponent_name (free text label, not a tracked entity), final_score_for, final_score_against (optional, just for the record)
 - `events` — id, game_id, timestamp/game_clock (optional), type, points (nullable)
 
-**Event types** (single-button taps — 6 buttons total):
+**Event types** (single-button taps, 7 buttons total):
 
 | Button | Effect |
 |---|---|
-| `+2` / `+3` | Adds points, **ends possession** |
-| `EMPTY` (possession ended, 0 points) | No points; **ends possession**. Covers any trip down the floor that didn't end in a score or a turnover — you're not tracking *why* (no shot-attempt detail), just that the possession produced nothing |
+| `+1` | Adds 1 point. Does **not** end the possession. Stored as `FT`. The points stay with the possession that a later `+2`, `+3`, `EMPTY`, or `TOV` closes |
+| `+2` / `+3` | Adds points, **ends possession**. Stored as `SCORE` |
+| `EMPTY` | Adds no points of its own and **ends possession**. Closes a trip that produced nothing, and also closes a free-throw trip that already scored with `+1` |
 | `TOV` (turnover) | **Ends possession**, no points, counted separately as a turnover |
-| `OFF_REB` | Continues the *same* possession — does **not** end it or increment the possession count |
-| `DEF_REB` | Standalone defensive stat — tallied on its own, doesn't need to be wired to possession start/end logic |
+| `OFF_REB` | Continues the same possession. Does **not** end it or increment the possession count |
+| `DEF_REB` | Standalone defensive stat. Tallied on its own, and it does not change the possession count |
 
-Note there's no `MISS` button and no shot-outcome tracking at all: whether a possession ended in a miss or in a live-ball turnover only matters if you care about FG%, which you don't. The only distinction that matters to your stats is *turnover vs. everything else*, so `EMPTY` and `TOV` are the only two "possession ended without scoring" buttons.
+There is still no `MISS` button and no field-goal percentage. A made free throw is one point on the current possession, not a shot attempt. `EMPTY` and `TOV` are still the only two buttons that end a possession with no points of their own. The bench sequences are in the README.
 
 **Derived stats (computed, not stored), always scoped to a `team_id`:**
 
-- `possessions` = count of `+2` + `+3` + `EMPTY` + `TOV` events (every possession-ending tap)
-- `points_per_possession` = `SUM(points) / possessions`
+- `possessions` = count of `+2` + `+3` + `EMPTY` + `TOV` events. A `+1` is not in this count
+- `points_per_possession` = `SUM(points) / possessions`. `SUM(points)` includes every `+1`
 - `offensive_rebounds` = count of `OFF_REB`
 - `defensive_rebounds` = count of `DEF_REB`
 - `turnovers` = count of `TOV`
 
-All stats derive from this one flat event log — no separate counters to keep in sync, and adding a stat later (if you ever want one) is just a new event type, no migration of old games.
+All stats derive from this one flat event log. There are no separate counters to keep in sync. A `+1` that is never closed stays in the points and is left out of the possession count.
 
 ## 4. SQL schema
 
@@ -80,9 +81,13 @@ CREATE INDEX idx_games_team_id ON games(team_id);
 CREATE TABLE events (
   id         TEXT PRIMARY KEY,  -- client-generated UUID, see \u00a7 offline architecture
   game_id    TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
-  type       TEXT NOT NULL CHECK (type IN ('SCORE', 'EMPTY', 'TOV', 'OFF_REB', 'DEF_REB')),
+  type       TEXT NOT NULL CHECK (type IN ('SCORE', 'FT', 'EMPTY', 'TOV', 'OFF_REB', 'DEF_REB')),
   points     INTEGER NOT NULL DEFAULT 0
-             CHECK ((type = 'SCORE' AND points IN (2, 3)) OR (type != 'SCORE' AND points = 0)),
+             CHECK (
+               (type = 'SCORE' AND points IN (2, 3)) OR
+               (type = 'FT' AND points = 1) OR
+               (type NOT IN ('SCORE', 'FT') AND points = 0)
+             ),
   created_at TEXT NOT NULL   -- the moment it happened courtside, not the moment it synced
 );
 
@@ -95,7 +100,7 @@ VALUES ('Campus Monferrato', 'U13', 'campus-monferrato-u13');
 
 **Why it's shaped this way, matching section 3:**
 
-- `+2`/`+3` from the bench UI both map to `type = 'SCORE'`, with `points` set to 2 or 3 — one event type, not two, since "made a shot" isn't tracked separately from "scored," and the `CHECK` constraint stops bad data (e.g. a `SCORE` row with `points = 0`, or a `TOV` row with `points = 2`) from ever landing in the table.
+- `+2`/`+3` from the bench UI both map to `type = 'SCORE'`, with `points` set to 2 or 3. `+1` maps to `type = 'FT'` with `points = 1`. The `CHECK` constraint stops bad data (a `SCORE` row with `points = 0`, an `FT` row with `points = 2`, or a `TOV` row with `points = 2`) from landing in the table. SQLite cannot change that check in place, so an existing database is rebuilt once by `npm run db:migrate-free-throw`, which copies every current row.
 - `EMPTY` and `TOV` both end a possession with `points = 0` but stay distinguishable in queries, since turnovers are a stat you track and empty possessions aren't.
 - `OFF_REB` and `DEF_REB` are just rows in the same table — they don't need their own columns or tables, since every stat in section 3 is a `COUNT(*) ... WHERE type = '...'` over this one table.
 - `ON DELETE CASCADE` on `events.game_id` means deleting a bad game (not just undoing one event) cleans up after itself — you won't be doing this often, but it's a one-line safeguard against orphaned rows.
@@ -173,7 +178,7 @@ Keep responses pre-aggregated where possible (compute possessions/PPP server-sid
 Routes are already team-scoped internally (`teamId` is threaded through every API call, sourced from the one row `/api/teams` returns), but there's no team switcher or team-picking screen in v1 — you land straight on the U13 dashboard/tracker, no extra tap. If a second category gets added later, the switcher is a small additive component, not a rebuild of the routing.
 
 ### Bench Live Tracker (`/game/:id/live`)
-- Six full-width, thumb-friendly buttons: `+2`, `+3`, `EMPTY`, `TOV`, `OFF REB`, `DEF REB`.
+- Seven thumb-friendly buttons: `+1`, `+2`, `+3` on the first row, then `EMPTY`, `TOV`, `OFF REB`, `DEF REB`. `+1` adds a point and does not end the possession. The sequences are in the README.
 - Running tally visible at top: current possessions, PPP, rebounds, turnovers — computed from local IndexedDB state and updated the instant a button is tapped, with no network involved in that path at all (see § Offline-first architecture).
 - **Undo button** always visible — bench entry will have mis-taps, this is non-negotiable for real usability.
 - **End game button** always visible, labeled with the words "End game" while the game is in progress. This is how a person finishes the live screen. The browser Back button is not the way to end a game, and the Pending sync status is not a reason to stay.
@@ -222,7 +227,7 @@ The app is for Campus Monferrato's Under 13 team (campusmonferrato.com), so it s
 
 ## 13. Scope decision
 
-Team-level stats only — no per-player breakdown in v1. The event log has no `player_id`, which keeps the bench UI to the 6 buttons above with nothing to select before tapping. If you want per-player stats later, it's a clean additive migration on the same schema (add a nullable `player_id` column to `events`), not a redesign.
+Team-level stats only, with no per-player breakdown in v1. The event log has no `player_id`, which keeps the bench UI to the 7 buttons above with nothing to select before tapping. If you want per-player stats later, it's a clean additive migration on the same schema (add a nullable `player_id` column to `events`), not a redesign.
 
 ## 14. Multi-category readiness (U14, U15, …)
 

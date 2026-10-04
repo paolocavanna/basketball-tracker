@@ -7,6 +7,7 @@
     "build": "npm ci --prefix frontend && npm run typecheck && npm --prefix frontend run build",
     "preview": "npm --prefix frontend run preview",
     "db:setup": "tsx scripts/apply-schema.ts",
+    "db:migrate-free-throw": "tsx scripts/migrate-free-throw.ts",
     "test": "tsx --test tests/*.test.ts",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
     "lint": "npm run lint:js && npm run lint:css",

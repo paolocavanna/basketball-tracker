@@ -8,6 +8,7 @@ describe("possession rules", () => {
     assert.equal(endsPossession("SCORE"), true);
     assert.equal(endsPossession("EMPTY"), true);
     assert.equal(endsPossession("TOV"), true);
+    assert.equal(endsPossession("FT"), false);
     assert.equal(endsPossession("OFF_REB"), false);
     assert.equal(endsPossession("DEF_REB"), false);
   });
@@ -94,6 +95,52 @@ describe("game statistics", () => {
     });
   });
 
+  it("adds free throw points to the possession that closes them", () => {
+    const missed = computeStats([event("EMPTY", 0)]);
+    assert.equal(missed.points, 0);
+    assert.equal(missed.possessions, 1);
+
+    const one = computeStats([event("FT", 1), event("EMPTY", 0)]);
+    assert.equal(one.points, 1);
+    assert.equal(one.possessions, 1);
+    assert.equal(one.points_per_possession, 1);
+
+    const two = computeStats([event("FT", 1), event("FT", 1), event("EMPTY", 0)]);
+    assert.equal(two.points, 2);
+    assert.equal(two.possessions, 1);
+    assert.equal(two.points_per_possession, 2);
+
+    const three = computeStats([event("FT", 1), event("FT", 1), event("FT", 1), event("EMPTY", 0)]);
+    assert.equal(three.points, 3);
+    assert.equal(three.possessions, 1);
+  });
+
+  it("keeps an and-1 on the basket when the free throw is tapped first", () => {
+    const made = computeStats([event("FT", 1), event("SCORE", 2)]);
+    assert.equal(made.points, 3);
+    assert.equal(made.possessions, 1);
+    assert.equal(made.points_per_possession, 3);
+
+    const missed = computeStats([event("SCORE", 3)]);
+    assert.equal(missed.points, 3);
+    assert.equal(missed.possessions, 1);
+  });
+
+  it("keeps free throws with the possession that continues after an offensive rebound", () => {
+    const stats = computeStats([event("FT", 1), event("OFF_REB", 0), event("SCORE", 2)]);
+    assert.equal(stats.points, 3);
+    assert.equal(stats.possessions, 1);
+    assert.equal(stats.offensive_rebounds, 1);
+    assert.equal(stats.points_per_possession, 3);
+  });
+
+  it("leaves an unclosed free throw out of the possession count", () => {
+    const stats = computeStats([event("FT", 1), event("FT", 1)]);
+    assert.equal(stats.points, 2);
+    assert.equal(stats.possessions, 0);
+    assert.equal(stats.points_per_possession, null);
+  });
+
   it("leaves points per possession null with zero possessions", () => {
     const stats = computeStats([event("OFF_REB", 0), event("DEF_REB", 0)]);
     assert.equal(stats.possessions, 0);
@@ -153,6 +200,9 @@ function event(type: EventType, points: number): StoredEvent {
   let payload: EventPayload;
   if (type === "SCORE") {
     if (points !== 2 && points !== 3) throw new Error("Score points must be 2 or 3");
+    payload = { type, points };
+  } else if (type === "FT") {
+    if (points !== 1) throw new Error("Free throw points must be 1");
     payload = { type, points };
   } else {
     payload = { type, points: 0 };

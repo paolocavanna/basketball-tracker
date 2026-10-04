@@ -13,15 +13,29 @@ import type { EventPayload, StoredEvent, StoredGame } from "../../../types.ts";
 type LabeledAction = EventPayload & {
   label: string;
   tone: "score" | "empty" | "turnover" | "rebound";
+  place: "points" | "rest";
 };
 
 const ACTIONS = [
-  { type: "SCORE", points: 2, label: text.actions.two, tone: "score" },
-  { type: "SCORE", points: 3, label: text.actions.three, tone: "score" },
-  { type: "EMPTY", points: 0, label: text.actions.empty, tone: "empty" },
-  { type: "TOV", points: 0, label: text.actions.turnover, tone: "turnover" },
-  { type: "OFF_REB", points: 0, label: text.actions.offensiveRebound, tone: "rebound" },
-  { type: "DEF_REB", points: 0, label: text.actions.defensiveRebound, tone: "rebound" },
+  { type: "FT", points: 1, label: text.actions.one, tone: "score", place: "points" },
+  { type: "SCORE", points: 2, label: text.actions.two, tone: "score", place: "points" },
+  { type: "SCORE", points: 3, label: text.actions.three, tone: "score", place: "points" },
+  { type: "EMPTY", points: 0, label: text.actions.empty, tone: "empty", place: "rest" },
+  { type: "TOV", points: 0, label: text.actions.turnover, tone: "turnover", place: "rest" },
+  {
+    type: "OFF_REB",
+    points: 0,
+    label: text.actions.offensiveRebound,
+    tone: "rebound",
+    place: "rest",
+  },
+  {
+    type: "DEF_REB",
+    points: 0,
+    label: text.actions.defensiveRebound,
+    tone: "rebound",
+    place: "rest",
+  },
 ] satisfies LabeledAction[];
 
 const props = defineProps<{
@@ -257,7 +271,7 @@ watch(
         :key="action.label"
         type="button"
         class="action"
-        :class="`action-${action.tone}`"
+        :class="[`action-${action.tone}`, `span-${action.place}`]"
         :disabled="!ready"
         @click="record(action)"
       >

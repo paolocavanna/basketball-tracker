@@ -10,6 +10,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isEventType(value: unknown): value is EventType {
   return (
     value === "SCORE" ||
+    value === "FT" ||
     value === "EMPTY" ||
     value === "TOV" ||
     value === "OFF_REB" ||
@@ -135,7 +136,7 @@ export function parseEventBatch(body: unknown): { events: ApiEvent[] } | { error
 
     if (!isEventType(item.type)) {
       return {
-        error: `Invalid event at index ${index}: type must be SCORE, EMPTY, TOV, OFF_REB, or DEF_REB`,
+        error: `Invalid event at index ${index}: type must be SCORE, FT, EMPTY, TOV, OFF_REB, or DEF_REB`,
       };
     }
 
@@ -153,6 +154,14 @@ export function parseEventBatch(body: unknown): { events: ApiEvent[] } | { error
         return { error: `Invalid event at index ${index}: SCORE points must be 2 or 3` };
       }
       events.push({ id: item.id, type: item.type, points: item.points, created_at: createdAt });
+      continue;
+    }
+
+    if (item.type === "FT") {
+      if (item.points !== 1) {
+        return { error: `Invalid event at index ${index}: FT points must be 1` };
+      }
+      events.push({ id: item.id, type: item.type, points: 1, created_at: createdAt });
       continue;
     }
 

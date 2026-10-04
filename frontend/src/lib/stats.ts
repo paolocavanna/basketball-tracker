@@ -1,7 +1,8 @@
 import type { EventType, GameStatistics, StoredEvent } from "../../../types.ts";
 
-// Possession rules from the specification: SCORE, EMPTY and TOV end a
-// possession, OFF_REB continues the current one, DEF_REB is standalone.
+// SCORE, EMPTY and TOV end a possession. FT adds a point and stays open until
+// one of those closes it. OFF_REB continues the current possession, and
+// DEF_REB is standalone.
 const POSSESSION_ENDING_TYPES = new Set<EventType>(["SCORE", "EMPTY", "TOV"]);
 
 export function endsPossession(type: EventType): boolean {
