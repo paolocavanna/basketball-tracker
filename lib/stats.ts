@@ -60,6 +60,7 @@ function nullableNumberColumn(row: Row, column: string): number | null {
 function isEventType(value: string): value is EventType {
   return (
     value === "SCORE" ||
+    value === "FT" ||
     value === "EMPTY" ||
     value === "TOV" ||
     value === "OFF_REB" ||
@@ -107,6 +108,10 @@ function mapEvent(row: Row): EventRecord {
   if (type === "SCORE") {
     if (points !== 2 && points !== 3) throw new Error("Unexpected database score value");
     return { id, game_id, type, points, created_at };
+  }
+  if (type === "FT") {
+    if (points !== 1) throw new Error("Unexpected database free throw value");
+    return { id, game_id, type, points: 1, created_at };
   }
   if (points !== 0) throw new Error("Unexpected database event points");
   return { id, game_id, type, points: 0, created_at };

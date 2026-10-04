@@ -36,6 +36,14 @@ function apiEvent(event: StoredEvent): Omit<EventRecord, "game_id"> {
       created_at: event.created_at,
     };
   }
+  if (event.type === "FT") {
+    return {
+      id: event.id,
+      type: "FT",
+      points: 1,
+      created_at: event.created_at,
+    };
+  }
   return {
     id: event.id,
     type: event.type,

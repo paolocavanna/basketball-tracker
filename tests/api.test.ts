@@ -264,6 +264,38 @@ describe("games and events API", { concurrency: false }, () => {
     });
   });
 
+  it("counts free throw points on the possession that closes them", async () => {
+    const id = crypto.randomUUID();
+    await putGame(id);
+    const synced = await sync(id, [
+      tap("FT", 1, "2026-10-04T10:00:00.000Z"),
+      tap("FT", 1, "2026-10-04T10:01:00.000Z"),
+      tap("EMPTY", 0, "2026-10-04T10:02:00.000Z"),
+      tap("FT", 1, "2026-10-04T10:03:00.000Z"),
+      tap("SCORE", 2, "2026-10-04T10:04:00.000Z"),
+    ]);
+    assert.equal(synced.status, 200);
+
+    const detail = await call(onRequestGameGet, {
+      url: `http://localhost/api/games/${id}`,
+      params: { id },
+    });
+    assert.deepEqual(objectField(detail.body, "stats"), {
+      points: 5,
+      possessions: 2,
+      points_per_possession: 2.5,
+      offensive_rebounds: 0,
+      defensive_rebounds: 0,
+      turnovers: 0,
+    });
+
+    const bad = await sync(id, [tap("FT", 2, "2026-10-04T10:05:00.000Z")]);
+    assert.equal(bad.status, 400);
+    assert.match(stringField(bad.body, "error"), /FT points must be 1/);
+    const count = await getDb(env).execute("SELECT COUNT(*) AS n FROM events");
+    assert.equal(Number(count.rows[0].n), 5);
+  });
+
   it("does not duplicate events when the same batch is synced again", async () => {
     const id = crypto.randomUUID();
     await putGame(id);

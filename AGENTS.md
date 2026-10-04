@@ -24,6 +24,7 @@ The live tracker must feel instant and must never depend on network availability
 
 Tracked events:
 
+- `+1` (made free throw, does not end the possession)
 - `+2`
 - `+3`
 - `EMPTY`
@@ -221,6 +222,7 @@ Valid event types:
 
 ```text
 SCORE
+FT
 EMPTY
 TOV
 OFF_REB
@@ -231,6 +233,12 @@ For `SCORE`:
 
 ```text
 points = 2 or 3
+```
+
+For `FT` (the `+1` button):
+
+```text
+points = 1
 ```
 
 For all other types:
@@ -270,15 +278,19 @@ turnovers =
   TOV count
 ```
 
+`FT` adds its point to that total and does not add a possession. The point belongs to the next `SCORE`, `EMPTY`, or `TOV`. A free throw that is never closed stays in the points and is left out of the possession count. The bench sequences are in the README.
+
 An `OFF_REB` does NOT end a possession.
 
 A `DEF_REB` is an independent defensive statistic.
 
 A `SCORE` event ends a possession.
 
-`EMPTY` ends a possession.
+`EMPTY` ends a possession, including a free-throw trip that already has `FT` points.
 
 `TOV` ends a possession.
+
+An `FT` event does not end a possession.
 
 Do not invent a `MISS` event.
 
@@ -452,7 +464,7 @@ Route:
 
 The screen must contain:
 
-- six large thumb-friendly buttons
+- seven large thumb-friendly buttons
 - running possessions
 - running PPP
 - rebounds
@@ -461,9 +473,10 @@ The screen must contain:
 - always-visible End game button, labeled "End game" while the game is in progress
 - sync status indicator
 
-The six primary buttons are:
+The seven primary buttons are:
 
 ```text
++1
 +2
 +3
 EMPTY
@@ -471,6 +484,8 @@ TOV
 OFF REB
 DEF REB
 ```
+
+`+1`, `+2`, and `+3` share the first row. `+1` adds one point and leaves the possession open. `EMPTY` closes that possession when the other team takes the ball, including after one or more made free throws. For an and-1, `+1` is tapped before `+2` or `+3`. The full sequences are in the README.
 
 End game asks for one confirmation, then marks the game finished, keeps its events, and opens the summary. Cancel leaves the game in progress. None of that waits on the network. The start screen and the dashboard list finished games locally so a finished game can be opened after a refresh or a failed sync. An in-progress game is not listed and has no resume action. The browser Back button is not the way to end a game.
 
@@ -683,6 +698,7 @@ Particularly test:
 SCORE ends possession
 EMPTY ends possession
 TOV ends possession
+FT adds one point and does not end possession
 OFF_REB does not end possession
 DEF_REB does not affect possession count
 duplicate sync does not duplicate events

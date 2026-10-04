@@ -28,9 +28,11 @@ interface ForcedDelete {
 }
 
 // The points a type carries unless the caller says otherwise. A SCORE is 2 or 3,
-// everything else is 0, which is what the server's CHECK constraints allow.
-const EVENT_POINTS: Record<EventType, 0 | 2> = {
+// a free throw is 1, and every other type is 0. That is what the server CHECK
+// allows.
+const EVENT_POINTS: Record<EventType, 0 | 1 | 2> = {
   SCORE: 2,
+  FT: 1,
   EMPTY: 0,
   TOV: 0,
   OFF_REB: 0,
@@ -302,7 +304,9 @@ export function createLocalStore({
       const record: StoredEvent =
         event.type === "SCORE"
           ? { ...common, type: "SCORE", points: event.points ?? 2 }
-          : { ...common, type: event.type, points: 0 };
+          : event.type === "FT"
+            ? { ...common, type: "FT", points: 1 }
+            : { ...common, type: event.type, points: 0 };
       return write(EVENTS, async (store) => {
         await onDone(store.put(record));
         return record;

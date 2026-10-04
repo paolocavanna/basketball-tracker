@@ -38,6 +38,9 @@ function event(
   if (type === "SCORE") {
     if (points !== 2 && points !== 3) throw new Error("Score points must be 2 or 3");
     payload = { type, points };
+  } else if (type === "FT") {
+    if (points !== 1) throw new Error("Free throw points must be 1");
+    payload = { type, points };
   } else {
     payload = { type, points: 0 };
   }
@@ -57,6 +60,8 @@ function materializeEvent(row: NewStoredEvent): StoredEvent {
   if (row.type === "SCORE") {
     if (row.points !== 2 && row.points !== 3) throw new Error("Score points must be 2 or 3");
     payload = { type: row.type, points: row.points };
+  } else if (row.type === "FT") {
+    payload = { type: "FT", points: 1 };
   } else {
     payload = { type: row.type, points: 0 };
   }

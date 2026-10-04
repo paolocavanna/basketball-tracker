@@ -224,6 +224,33 @@ describe("sync manager", { concurrency: false }, () => {
       assert.equal(computeStats(events).offensive_rebounds, 1);
     }));
 
+  it("uploads a free throw as one point and does not count it as a possession", () =>
+    withStore(async (store) => {
+      await store.saveGame(game(GAME_ID, "Novi Ligure"));
+      const freeThrow = await store.saveEvent({
+        game_id: GAME_ID,
+        type: "FT",
+        created_at: at(1),
+      });
+      const close = await store.saveEvent({
+        game_id: GAME_ID,
+        type: "EMPTY",
+        created_at: at(2),
+      });
+
+      const http = recorded((call) => accepted(call));
+      const manager = createSyncManager({ store, fetch: http.fetch });
+      assert.equal((await manager.syncNow()).ok, true);
+      assert.deepEqual(posts(http.calls)[0].body, [
+        { id: freeThrow.id, type: "FT", points: 1, created_at: at(1) },
+        { id: close.id, type: "EMPTY", points: 0, created_at: at(2) },
+      ]);
+
+      const events = await store.loadGameEvents(GAME_ID);
+      assert.equal(computeStats(events).points, 1);
+      assert.equal(computeStats(events).possessions, 1);
+    }));
+
   it("leaves the batch pending when the upload fails", () =>
     withStore(async (store) => {
       await store.saveGame(game(GAME_ID, "Novi Ligure"));

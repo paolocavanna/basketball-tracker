@@ -20,9 +20,13 @@ CREATE INDEX idx_games_team_id ON games(team_id);
 CREATE TABLE events (
   id         TEXT PRIMARY KEY,  -- client-generated UUID, see § offline architecture
   game_id    TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
-  type       TEXT NOT NULL CHECK (type IN ('SCORE', 'EMPTY', 'TOV', 'OFF_REB', 'DEF_REB')),
+  type       TEXT NOT NULL CHECK (type IN ('SCORE', 'FT', 'EMPTY', 'TOV', 'OFF_REB', 'DEF_REB')),
   points     INTEGER NOT NULL DEFAULT 0
-             CHECK ((type = 'SCORE' AND points IN (2, 3)) OR (type != 'SCORE' AND points = 0)),
+             CHECK (
+               (type = 'SCORE' AND points IN (2, 3)) OR
+               (type = 'FT' AND points = 1) OR
+               (type NOT IN ('SCORE', 'FT') AND points = 0)
+             ),
   created_at TEXT NOT NULL   -- the moment it happened courtside, not the moment it synced
 );
 

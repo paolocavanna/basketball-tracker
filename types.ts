@@ -1,11 +1,15 @@
-export type EventType = "SCORE" | "EMPTY" | "TOV" | "OFF_REB" | "DEF_REB";
-export type NonScoreEventType = Exclude<EventType, "SCORE">;
+export type EventType = "SCORE" | "FT" | "EMPTY" | "TOV" | "OFF_REB" | "DEF_REB";
+export type ZeroPointEventType = Exclude<EventType, "SCORE" | "FT">;
 
 export type EventPayload =
-  { type: "SCORE"; points: 2 | 3 } | { type: NonScoreEventType; points: 0 };
+  | { type: "SCORE"; points: 2 | 3 }
+  | { type: "FT"; points: 1 }
+  | { type: ZeroPointEventType; points: 0 };
 
 export type NewEventPayload =
-  { type: "SCORE"; points?: 2 | 3 } | { type: NonScoreEventType; points?: 0 };
+  | { type: "SCORE"; points?: 2 | 3 }
+  | { type: "FT"; points?: 1 }
+  | { type: ZeroPointEventType; points?: 0 };
 
 interface EventMetadata {
   id: string;

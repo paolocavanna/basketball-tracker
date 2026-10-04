@@ -68,6 +68,7 @@ function isEventRecord(value: unknown): value is EventRecord {
     return false;
   }
   if (value.type === "SCORE") return value.points === 2 || value.points === 3;
+  if (value.type === "FT") return value.points === 1;
   return (
     (value.type === "EMPTY" ||
       value.type === "TOV" ||
