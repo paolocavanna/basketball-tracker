@@ -41,6 +41,9 @@ export interface GameRecord {
   status?: GameStatus;
   final_score_for?: number | null;
   final_score_against?: number | null;
+  // Set on this device once the coach saves both final scores. The winner is
+  // derived from those scores and is not stored on its own.
+  final_scores_confirmed?: boolean;
 }
 
 export interface ParsedGame extends GameRecord {

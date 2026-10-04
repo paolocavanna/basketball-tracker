@@ -1,29 +1,26 @@
 import type { GameRecord, StoredEvent, StoredGame } from "../../../types.ts";
 import { gameStatus } from "./localStore.ts";
 import type { LocalStore } from "./localStore.ts";
-import { livePath, summaryPath } from "./route.ts";
+import { summaryPath } from "./route.ts";
 import { computeStats } from "./stats.ts";
 
 export const RECENT_GAME_LIMIT = 8;
 
-// Whole numbers a coach can actually enter for an opponent. Empty and
-// decimals stay invalid so a slip does not wipe a score that was already saved.
-const OPPONENT_SCORE = /^(0|[1-9]\d{0,2})$/;
+// Whole numbers a coach can enter for either final score. Empty and decimals
+// stay invalid so a slip does not wipe a result that was already saved.
+const FINAL_SCORE = /^(0|[1-9]\d{0,2})$/;
 
+// Finished games only. An in-progress game stays on the live page and is not
+// listed, so leaving that page does not offer a way back in.
 export function recentGames(games: readonly StoredGame[], limit = RECENT_GAME_LIMIT): StoredGame[] {
   return [...games]
+    .filter((game) => gameStatus(game) === "finished")
     .sort((a, b) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id))
     .slice(0, limit);
 }
 
-export type RecoveryAction = "continue" | "open";
-
-export function recoveryAction(game: Pick<GameRecord, "status">): RecoveryAction {
-  return gameStatus(game) === "finished" ? "open" : "continue";
-}
-
-export function recoveryPath(game: Pick<GameRecord, "id" | "status">): string {
-  return recoveryAction(game) === "continue" ? livePath(game.id) : summaryPath(game.id);
+export function recoveryPath(game: Pick<GameRecord, "id">): string {
+  return summaryPath(game.id);
 }
 
 export function formatGameDate(date: string): string {
@@ -37,13 +34,14 @@ export function formatGameDate(date: string): string {
   }).format(parsed);
 }
 
-// The team score always comes from the log. Finishing stores that number
-// beside the opponent score; it does not replace the events that produced it.
+// Until the coach saves both final scores, the team number is the log.
+// After that, the saved pair is the result and log corrections leave it alone.
 export function toGameRecord(
   game: StoredGame,
   events: readonly StoredEvent[],
   status = gameStatus(game),
 ): GameRecord {
+  const confirmed = game.final_scores_confirmed === true;
   return {
     id: game.id,
     team_id: game.team_id,
@@ -51,8 +49,9 @@ export function toGameRecord(
     opponent_name: game.opponent_name,
     created_at: game.created_at,
     status,
-    final_score_for: computeStats(events).points,
+    final_score_for: confirmed ? (game.final_score_for ?? null) : computeStats(events).points,
     final_score_against: game.final_score_against ?? null,
+    final_scores_confirmed: confirmed,
   };
 }
 
@@ -66,29 +65,57 @@ export async function applyFinishChoice(
   return store.saveGame(toGameRecord(game, events, "finished"));
 }
 
-export function parseOpponentScore(raw: string): number | null {
+export function parseFinalScore(raw: string): number | null {
   const text = raw.trim();
-  if (!OPPONENT_SCORE.test(text)) return null;
+  if (!FINAL_SCORE.test(text)) return null;
   return Number(text);
 }
 
-export async function saveOpponentScore(
+export type GameResult = "win" | "loss" | "draw";
+
+// The higher of the two saved scores wins. Equal scores are a draw.
+export function gameResult(
+  ours: number | null | undefined,
+  theirs: number | null | undefined,
+): GameResult | null {
+  if (ours == null || theirs == null) return null;
+  if (ours > theirs) return "win";
+  if (ours < theirs) return "loss";
+  return "draw";
+}
+
+export function resultLabel(
+  result: GameResult,
+  opponentName: string,
+  copy: { campusWon: string; opponentWon: string; draw: string },
+): string {
+  if (result === "win") return copy.campusWon;
+  if (result === "draw") return copy.draw;
+  return copy.opponentWon.replace("{opponent}", opponentName);
+}
+
+export async function saveFinalScores(
   store: Pick<LocalStore, "saveGame">,
   game: StoredGame,
   events: readonly StoredEvent[],
-  raw: string,
+  rawFor: string,
+  rawAgainst: string,
 ): Promise<{ ok: true; game: StoredGame } | { ok: false }> {
-  const score = parseOpponentScore(raw);
-  if (score == null) return { ok: false };
+  const ours = parseFinalScore(rawFor);
+  const theirs = parseFinalScore(rawAgainst);
+  if (ours == null || theirs == null) return { ok: false };
   const saved = await store.saveGame({
     ...toGameRecord(game, events),
-    final_score_against: score,
+    final_score_for: ours,
+    final_score_against: theirs,
+    final_scores_confirmed: true,
   });
   return { ok: true, game: saved };
 }
 
-// Corrections on a finished game keep the finished state and refresh the
-// stored team score from the log. In-progress games are left untouched.
+// Corrections on a finished game keep the finished state. The stored team
+// score follows the log until both final scores are saved. In-progress games
+// are left untouched.
 export async function persistDerivedScore(
   store: Pick<LocalStore, "saveGame">,
   game: StoredGame,

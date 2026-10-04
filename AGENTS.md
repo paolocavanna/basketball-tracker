@@ -472,7 +472,7 @@ OFF REB
 DEF REB
 ```
 
-End game asks for one confirmation, then marks the game finished, keeps its events, and opens the summary. Cancel leaves the game in progress. None of that waits on the network. The start screen and the dashboard list the game locally so it can be reopened after a refresh or a failed sync. The browser Back button is not the way to end a game.
+End game asks for one confirmation, then marks the game finished, keeps its events, and opens the summary. Cancel leaves the game in progress. None of that waits on the network. The start screen and the dashboard list finished games locally so a finished game can be opened after a refresh or a failed sync. An in-progress game is not listed and has no resume action. The browser Back button is not the way to end a game.
 
 No page reloads.
 

@@ -226,6 +226,7 @@ export function createLocalStore({
         status: game.status === "finished" ? "finished" : "in-progress",
         final_score_for: game.final_score_for ?? null,
         final_score_against: game.final_score_against ?? null,
+        final_scores_confirmed: game.final_scores_confirmed === true,
         synced: false,
       };
       return write(GAMES, async (store) => {

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import text from "../text/en.json";
+import { gameResult, parseFinalScore, resultLabel, saveFinalScores } from "../lib/gameLifecycle.ts";
 import { formatPpp } from "../lib/liveLog.ts";
-import { saveOpponentScore } from "../lib/gameLifecycle.ts";
 import { gameStatus } from "../lib/localStore.ts";
 import type { LocalStore } from "../lib/localStore.ts";
 import { livePath } from "../lib/route.ts";
@@ -23,7 +23,8 @@ const events = ref<StoredEvent[]>([]);
 const ready = ref(false);
 const missing = ref(false);
 const failed = ref(false);
-const scoreInput = ref("");
+const campusInput = ref("");
+const opponentInput = ref("");
 const scoreError = ref("");
 const scoreMessage = ref("");
 const savingScore = ref(false);
@@ -31,6 +32,15 @@ const savingScore = ref(false);
 const stats = computed(() => computeStats(events.value));
 const ppp = computed(() => formatPpp(stats.value.points_per_possession));
 const finished = computed(() => (game.value ? gameStatus(game.value) === "finished" : false));
+const campusScore = computed(() => parseFinalScore(campusInput.value));
+const opponentScore = computed(() => parseFinalScore(opponentInput.value));
+const previewResult = computed(() => gameResult(campusScore.value, opponentScore.value));
+const winnerText = computed(() => {
+  const current = game.value;
+  const result = previewResult.value;
+  if (!current || !result) return "";
+  return resultLabel(result, current.opponent_name, text.result);
+});
 
 onMounted(async () => {
   try {
@@ -43,7 +53,9 @@ onMounted(async () => {
     } else {
       game.value = storedGame;
       events.value = storedEvents;
-      scoreInput.value =
+      campusInput.value =
+        storedGame.final_score_for == null ? "" : String(storedGame.final_score_for);
+      opponentInput.value =
         storedGame.final_score_against == null ? "" : String(storedGame.final_score_against);
     }
   } catch {
@@ -65,7 +77,13 @@ async function saveScore(): Promise<void> {
   scoreError.value = "";
   scoreMessage.value = "";
   try {
-    const result = await saveOpponentScore(props.store, current, events.value, scoreInput.value);
+    const result = await saveFinalScores(
+      props.store,
+      current,
+      events.value,
+      campusInput.value,
+      opponentInput.value,
+    );
     if (!result.ok) {
       scoreError.value = text.summary.invalidScore;
       return;
@@ -102,8 +120,8 @@ async function saveScore(): Promise<void> {
   <section v-else-if="!finished" class="bench bench-message">
     <h1>{{ text.summary.inProgress }}</h1>
     <p>{{ text.recent.vs }} {{ game.opponent_name }}</p>
-    <button type="button" class="start" @click="emit('navigate', livePath(gameId))">
-      {{ text.recent.continueGame }}
+    <button type="button" class="summary-done" @click="emit('navigate', '/')">
+      {{ text.summary.backToStart }}
     </button>
   </section>
 
@@ -117,8 +135,14 @@ async function saveScore(): Promise<void> {
     </header>
 
     <div class="scoreboard">
-      <p class="score">{{ stats.points }}</p>
-      <p class="score-label">{{ text.summary.team }}</p>
+      <p v-if="campusScore != null && opponentScore != null" class="score">
+        {{ campusScore }}<span class="score-sep">-</span>{{ opponentScore }}
+      </p>
+      <p v-else class="score">{{ stats.points }}</p>
+      <p v-if="winnerText" class="game-result" :class="`game-result-${previewResult}`">
+        {{ winnerText }}
+      </p>
+      <p v-else class="score-label">{{ text.tracker.points }}</p>
     </div>
 
     <div class="tally" aria-live="polite">
@@ -143,17 +167,31 @@ async function saveScore(): Promise<void> {
     </div>
 
     <form class="summary-score-form" @submit.prevent="saveScore">
-      <label>
-        {{ text.summary.opponentScore }}
-        <input
-          v-model="scoreInput"
-          name="opponent-score"
-          type="text"
-          inputmode="numeric"
-          autocomplete="off"
-          @input="onScoreInput"
-        />
-      </label>
+      <p class="score-hint">{{ text.summary.scoreHint }}</p>
+      <div class="summary-score-fields">
+        <label>
+          {{ text.summary.campusScore }}
+          <input
+            v-model="campusInput"
+            name="campus-score"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            @input="onScoreInput"
+          />
+        </label>
+        <label>
+          {{ text.summary.opponentScore }}
+          <input
+            v-model="opponentInput"
+            name="opponent-score"
+            type="text"
+            inputmode="numeric"
+            autocomplete="off"
+            @input="onScoreInput"
+          />
+        </label>
+      </div>
       <p v-if="scoreError" class="form-error" role="alert">{{ scoreError }}</p>
       <p v-else-if="scoreMessage" class="score-saved" role="status">{{ scoreMessage }}</p>
       <button type="submit" class="start" :disabled="savingScore">

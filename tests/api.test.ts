@@ -119,7 +119,7 @@ describe("games and events API", { concurrency: false }, () => {
     assert.equal(Number(remaining.rows[0].n), 0);
   });
 
-  it("creates a game once and ignores a repeated put", async () => {
+  it("keeps the first opponent and accepts a later final score", async () => {
     const id = crypto.randomUUID();
     const first = await putGame(id, { opponent: "Novi Ligure", final_score_for: 42 });
     assert.equal(first.status, 201);
@@ -135,8 +135,20 @@ describe("games and events API", { concurrency: false }, () => {
     });
     assert.equal(second.status, 200);
     assert.equal(field(second.body, "opponent_name"), "Novi Ligure");
-    assert.equal(field(second.body, "final_score_for"), 42);
+    assert.equal(field(second.body, "final_score_for"), 10);
+    assert.equal(field(second.body, "final_score_against"), null);
     assert.equal(field(second.body, "created_at"), "2026-10-04T18:00:00.000Z");
+
+    const scored = await putGame(id, { final_score_for: 61, final_score_against: 39 });
+    assert.equal(scored.status, 200);
+    assert.equal(field(scored.body, "opponent_name"), "Novi Ligure");
+    assert.equal(field(scored.body, "final_score_for"), 61);
+    assert.equal(field(scored.body, "final_score_against"), 39);
+
+    const omitted = await putGame(id, {});
+    assert.equal(field(omitted.body, "final_score_for"), 61);
+    assert.equal(field(omitted.body, "final_score_against"), 39);
+    assert.equal(field(omitted.body, "opponent_name"), "Novi Ligure");
 
     const count = await getDb(env).execute("SELECT COUNT(*) AS n FROM games");
     assert.equal(Number(count.rows[0].n), 1);
