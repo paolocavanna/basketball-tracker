@@ -702,6 +702,7 @@ a {
 
 .game-list-item strong {
   font-size: 0.83rem;
+  text-transform: capitalize;
 }
 
 .game-list-item small {
@@ -1205,6 +1206,10 @@ a {
 .dashboard .recent-games h2,
 .dashboard .recent-opponent {
   color: var(--color-primary);
+}
+
+.dashboard .opponent-name {
+  text-transform: capitalize;
 }
 
 .dashboard .recent-games li {
