@@ -60,7 +60,15 @@ describe("local store schema", () => {
   it("creates a store per entity, the delete queue, and the log index", () =>
     withStore(async (store) => {
       const db = await store.open();
-      assert.deepEqual([...db.objectStoreNames].sort(), ["events", "forcedDeletes", "games"]);
+      assert.deepEqual([...db.objectStoreNames].sort(), [
+        "events",
+        "forcedDeletes",
+        "gamePlayers",
+        "gameTimers",
+        "games",
+        "playerShifts",
+        "players",
+      ]);
 
       const tx = db.transaction("events", "readonly");
       assert.deepEqual([...tx.objectStore("events").indexNames], ["by_game"]);

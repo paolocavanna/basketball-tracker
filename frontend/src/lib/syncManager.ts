@@ -56,6 +56,16 @@ function accepted(response: Response | null): boolean {
   return Boolean(response && response.ok);
 }
 
+function apiPlayer(player: StoredPlayer): PlayerRecord {
+  return {
+    id: player.id,
+    team_id: player.team_id,
+    name: player.name,
+    active: player.active,
+    created_at: player.created_at,
+  };
+}
+
 type TimerHandle = unknown;
 type ScheduleTimer = (callback: () => void, delay: number) => TimerHandle;
 type CancelTimer = (handle: unknown) => void;
@@ -173,6 +183,26 @@ export function createSyncManager({
     return ok;
   }
 
+  async function syncPlayers(): Promise<boolean> {
+    let ok = true;
+    for (const player of await store.pendingPlayers()) {
+      const sent = await send(
+        `/api/teams/${player.team_id}/players/${encodeURIComponent(player.id)}`,
+        {
+          method: "PUT",
+          headers: JSON_HEADERS,
+          body: JSON.stringify(apiPlayer(player)),
+        },
+      );
+      if (!accepted(sent)) {
+        ok = false;
+        continue;
+      }
+      await store.markPlayerSynced(player);
+    }
+    return ok;
+  }
+
   async function syncEventBatches(): Promise<boolean> {
     let ok = true;
     const events = await store.pendingEvents();
@@ -245,10 +275,11 @@ export function createSyncManager({
   }
 
   async function runPass(): Promise<boolean> {
+    const playersOk = await syncPlayers();
     const gamesOk = await syncGames();
     const eventsOk = await syncEventBatches();
     const deletionsOk = await syncDeletions();
-    return gamesOk && eventsOk && deletionsOk;
+    return playersOk && gamesOk && eventsOk && deletionsOk;
   }
 
   async function execute(): Promise<{ ok: boolean }> {
@@ -331,5 +362,12 @@ export function createSyncManager({
 
   return { start, stop, kick, syncNow, settled };
 }
-import type { EventRecord, PutGameRequest, StoredEvent, StoredGame } from "../../../types.ts";
+import type {
+  EventRecord,
+  PlayerRecord,
+  PutGameRequest,
+  StoredEvent,
+  StoredGame,
+  StoredPlayer,
+} from "../../../types.ts";
 import type { LocalStore } from "./localStore.ts";

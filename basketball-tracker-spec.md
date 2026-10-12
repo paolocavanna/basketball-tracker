@@ -9,15 +9,15 @@
 
 ## 2. Does it need a database? Yes.
 
-Serverless functions — Cloudflare Pages Functions included — are stateless: no writable filesystem persists between invocations. Since you explicitly want history "over time," you need a persistence layer outside the app code. The dataset is tiny (dozens of games/season, a few hundred events/game), so this is a capacity non-issue — pick the DB for *developer experience* and *free-tier permanence*, not scale.
+Serverless functions — Cloudflare Pages Functions included — are stateless: no writable filesystem persists between invocations. Since you explicitly want history "over time," you need a persistence layer outside the app code. The dataset is tiny (dozens of games/season, a few hundred events/game), so this is a capacity non-issue — pick the DB for _developer experience_ and _free-tier permanence_, not scale.
 
 **Recommendation: a small hosted SQL DB, decoupled from your hosting provider**, so you can move frontend/backend hosts later without touching data:
 
-| Option | Why | Free tier |
-|---|---|---|
+| Option                    | Why                                                                                                | Free tier                  |
+| ------------------------- | -------------------------------------------------------------------------------------------------- | -------------------------- |
 | **Turso** (libSQL/SQLite) | Fastest to set up, SQL you already know, great for edge functions, fully independent of Cloudflare | Generous, no card required |
-| **Supabase** (Postgres) | More features (auto REST API, realtime, dashboard UI to poke at data), if you want that overhead | Generous, no card required |
-| Neon (Postgres) | Similar to Supabase, more minimal | Generous |
+| **Supabase** (Postgres)   | More features (auto REST API, realtime, dashboard UI to poke at data), if you want that overhead   | Generous, no card required |
+| Neon (Postgres)           | Similar to Supabase, more minimal                                                                  | Generous                   |
 
 Go with **Turso** unless you want Supabase's built-in table-editor GUI for manually fixing a bad stat entry after a game — that's a real convenience for a non-technical assistant coach editing data.
 
@@ -30,17 +30,18 @@ No opponent stats, no shot make/miss tracking (no FG%) — only what feeds posse
 - `teams` — id, name, category (e.g. `"U13"`, `"U14"`), slug. Seeded with a single row for Campus Monferrato U13 at setup. Not exposed in the UI at all for v1 — there's nothing to pick between yet — but every other table hangs off `team_id` from day one, so adding U14/U15 later is inserting a row here, not restructuring anything.
 - `games` — id, `team_id` (FK → `teams`), date, opponent_name (free text label, not a tracked entity), final_score_for, final_score_against (optional, just for the record)
 - `events` — id, game_id, timestamp/game_clock (optional), type, points (nullable)
+- `players` — client-generated id, `team_id` (FK → `teams`), name, active flag, created_at. This is the reusable team roster; archived players remain available to old game snapshots.
 
 **Event types** (single-button taps, 7 buttons total):
 
-| Button | Effect |
-|---|---|
-| `+1` | Adds 1 point. Does **not** end the possession. Stored as `FT`. The points stay with the possession that a later `+2`, `+3`, `EMPTY`, or `TOV` closes |
-| `+2` / `+3` | Adds points, **ends possession**. Stored as `SCORE` |
-| `EMPTY` | Adds no points of its own and **ends possession**. Closes a trip that produced nothing, and also closes a free-throw trip that already scored with `+1` |
-| `TOV` (turnover) | **Ends possession**, no points, counted separately as a turnover |
-| `OFF_REB` | Continues the same possession. Does **not** end it or increment the possession count |
-| `DEF_REB` | Standalone defensive stat. Tallied on its own, and it does not change the possession count |
+| Button           | Effect                                                                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `+1`             | Adds 1 point. Does **not** end the possession. Stored as `FT`. The points stay with the possession that a later `+2`, `+3`, `EMPTY`, or `TOV` closes    |
+| `+2` / `+3`      | Adds points, **ends possession**. Stored as `SCORE`                                                                                                     |
+| `EMPTY`          | Adds no points of its own and **ends possession**. Closes a trip that produced nothing, and also closes a free-throw trip that already scored with `+1` |
+| `TOV` (turnover) | **Ends possession**, no points, counted separately as a turnover                                                                                        |
+| `OFF_REB`        | Continues the same possession. Does **not** end it or increment the possession count                                                                    |
+| `DEF_REB`        | Standalone defensive stat. Tallied on its own, and it does not change the possession count                                                              |
 
 There is still no `MISS` button and no field-goal percentage. A made free throw is one point on the current possession, not a shot attempt. `EMPTY` and `TOV` are still the only two buttons that end a possession with no points of their own. The bench sequences are in the README.
 
@@ -93,6 +94,16 @@ CREATE TABLE events (
 
 CREATE INDEX idx_events_game_id ON events(game_id);
 
+CREATE TABLE players (
+  id         TEXT PRIMARY KEY,
+  team_id    INTEGER NOT NULL REFERENCES teams(id),
+  name       TEXT NOT NULL,
+  active     INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX idx_players_team_id ON players(team_id);
+
 -- Seed the one team you actually have right now:
 INSERT INTO teams (name, category, slug)
 VALUES ('Campus Monferrato', 'U13', 'campus-monferrato-u13');
@@ -104,8 +115,8 @@ VALUES ('Campus Monferrato', 'U13', 'campus-monferrato-u13');
 - `EMPTY` and `TOV` both end a possession with `points = 0` but stay distinguishable in queries, since turnovers are a stat you track and empty possessions aren't.
 - `OFF_REB` and `DEF_REB` are just rows in the same table — they don't need their own columns or tables, since every stat in section 3 is a `COUNT(*) ... WHERE type = '...'` over this one table.
 - `ON DELETE CASCADE` on `events.game_id` means deleting a bad game (not just undoing one event) cleans up after itself — you won't be doing this often, but it's a one-line safeguard against orphaned rows.
-- `games.id` and `events.id` are client-generated UUIDs (`crypto.randomUUID()`), not server autoincrement. This is a direct consequence of the offline-first design below: a tap at courtside has to get an ID *the instant it happens*, with zero network round-trip, so the ID can't come from the server. It also makes every write idempotent — if a sync retry re-sends the same event, the server sees the same ID and can safely ignore the duplicate.
-- `created_at` is supplied by the client, not server-defaulted. The whole point of local-first capture is that the timestamp on a possession is *when it happened on the bench*, not when the phone happened to get signal again to sync it — those can be minutes apart.
+- `games.id` and `events.id` are client-generated UUIDs (`crypto.randomUUID()`), not server autoincrement. This is a direct consequence of the offline-first design below: a tap at courtside has to get an ID _the instant it happens_, with zero network round-trip, so the ID can't come from the server. It also makes every write idempotent — if a sync retry re-sends the same event, the server sees the same ID and can safely ignore the duplicate.
+- `created_at` is supplied by the client, not server-defaulted. The whole point of local-first capture is that the timestamp on a possession is _when it happened on the bench_, not when the phone happened to get signal again to sync it — those can be minutes apart.
 - The two indexes exist because every dashboard query filters by `team_id` or `game_id` — trivial at this data size, but free and correct to have from the start.
 
 With this schema, the stat formulas from section 3 become straightforward SQL, e.g. points-per-possession for a game:
@@ -129,18 +140,20 @@ WHERE game_id = ?;
 
 **The core requirement:** tapping a stat button must feel instant, with zero dependency on network round-trip time — gym WiFi is exactly the kind of connection that shouldn't be on the critical path between a tap and the screen updating. Every interaction is written to the device first; the remote DB is a background concern, not something the UI ever waits on.
 
-**Storage: IndexedDB**, not localStorage/sessionStorage — see the reasoning above. One object store per entity (`games`, `events`), each record carrying a `synced: boolean` flag alongside its normal fields.
+**Storage: IndexedDB**, not localStorage/sessionStorage — see the reasoning above. `games`, `events`, and the reusable roster are persisted. Current-game player snapshots, timer state, and player shifts are also kept locally so a refresh during the game does not lose them, but they are never synced or included in season history. Clear these temporary timing records when leaving the game summary and when opening the app outside that same game.
 
 **Write path for every button tap (e.g. `+2`):**
+
 1. Generate a UUID for the event client-side (`crypto.randomUUID()`).
 2. Build the event record with `created_at = new Date().toISOString()` and `synced: false`.
 3. Write it to IndexedDB.
 4. Update the in-memory reactive state (Vue `ref`) from the same write — the running possessions/PPP/rebounds/turnovers tally on screen updates immediately, in the same tick. No `await fetch(...)` anywhere in this path.
 5. Kick the sync manager (step below) — it decides on its own whether now is a good time to actually talk to the network.
 
-This means the UI's only source of truth *during a game* is IndexedDB plus in-memory state — the API is never read from live during the tracker flow, only written to, asynchronously, after the fact.
+This means the UI's only source of truth _during a game_ is IndexedDB plus in-memory state — the API is never read from live during the tracker flow, only written to, asynchronously, after the fact.
 
 **Sync manager (runs the same on every page, not just the tracker):**
+
 - Triggers on three occasions: (a) the browser's `online` event firing, (b) an idle moment via `requestIdleCallback` (with a `setTimeout` fallback for Safari, which doesn't support it), and (c) a periodic tick (e.g. every 10s) as a safety net.
 - On trigger: read all `synced: false` records from IndexedDB, `POST` them to the API in one batch (see the new endpoint below), and on success mark them `synced: true` in IndexedDB.
 - On failure (no network, request errors): does nothing and quietly waits for the next trigger — no retry loop spinning in the background, no error shown to the person on the bench mid-game.
@@ -156,6 +169,8 @@ This means the UI's only source of truth *during a game* is IndexedDB plus in-me
 
 ```
 GET    /api/teams                 list teams (v1: returns the single U13 row)
+GET    /api/teams/:teamId/players list the reusable roster for a team
+PUT    /api/teams/:teamId/players/:playerId upsert a roster player (including archived state)
 PUT    /api/games/:id              upsert a game {id, team_id, date, opponent, created_at}
 GET    /api/games?team_id=         list games for a team (for dashboard/season view)
 GET    /api/games/:id              game detail + all events
@@ -171,13 +186,17 @@ Two changes from the earlier draft, both direct consequences of the offline-firs
 
 Every read endpoint takes `team_id` even though v1 only ever has one team — the frontend hardcodes it (fetched once from `/api/teams`) rather than showing a picker. This is the one place the "leave it open" decision costs anything up front, and it's a single query parameter, not an architectural change.
 
-Keep responses pre-aggregated where possible (compute possessions/PPP server-side) so the dashboard doesn't need heavy client logic. Dashboard reads still go straight to the API as before — it's only the *tracker's* writes that are local-first; the dashboard is read-only and has no reason not to just ask the server.
+Keep responses pre-aggregated where possible (compute possessions/PPP server-side) so the dashboard doesn't need heavy client logic. Dashboard reads still go straight to the API as before — it's only the _tracker's_ writes that are local-first; the dashboard is read-only and has no reason not to just ask the server.
 
 ## 8. Frontend UX
 
 Routes are already team-scoped internally (`teamId` is threaded through every API call, sourced from the one row `/api/teams` returns), but there's no team switcher or team-picking screen in v1 — you land straight on the U13 dashboard/tracker, no extra tap. If a second category gets added later, the switcher is a small additive component, not a rebuild of the routing.
 
 ### Bench Live Tracker (`/game/:id/live`)
+
+- The start screen maintains the reusable roster, selects who is available, and requires five starters before creating a tracked game. These roster records sync in the background; game-time data does not.
+- A single elapsed timer starts only when the coach taps Start clock. Pause it during breaks. The tracker shows the five players on court and opens a thumb-friendly lineup sheet to swap one player in and one out together. A separate action undoes the most recent substitution.
+- Per-player shifts are local-only and scoped to the current game. The timer continues to calculate through a refresh of the same game's live page or summary, but playing time is not uploaded, exposed in the season dashboard, or retained after leaving the summary.
 - Seven thumb-friendly buttons: `+1`, `+2`, `+3` on the first row, then `EMPTY`, `TOV`, `OFF REB`, `DEF REB`. `+1` adds a point and does not end the possession. The sequences are in the README.
 - Running tally visible at top: current possessions, PPP, rebounds, turnovers — computed from local IndexedDB state and updated the instant a button is tapped, with no network involved in that path at all (see § Offline-first architecture).
 - **Undo button** always visible — bench entry will have mis-taps, this is non-negotiable for real usability.
@@ -188,6 +207,7 @@ Routes are already team-scoped internally (`teamId` is threaded through every AP
 - No page reloads.
 
 ### Dashboard (`/dashboard`)
+
 - **Per-game view:** pick a game, see its stat line + a simple bar/line chart of possession-by-possession PPP.
 - **Season/trend view:** line charts of PPP, TOV, reb rates across all games in chronological order, so you can see whether the team is trending up.
 - Finished games stored on this device are listed above the season view, with Open. An in-progress game is not listed. That list is local, so it remains when the season request fails.
@@ -222,12 +242,12 @@ The app is for Campus Monferrato's Under 13 team (campusmonferrato.com), so it s
 ## 12. Mobile-first UI/UX
 
 - Layout built mobile-first: base styles target a phone/tablet in the hand at the bench, with `min-width` media queries progressively enhancing for desktop (larger dashboard charts, side-by-side game list + detail) rather than the reverse.
-- Bench Live Tracker: during a game the interactive controls are the 6 stat buttons, Undo, and End game. Large tap targets (min 44×44px), high contrast, no scrolling needed to reach any of them one-handed. End game is labeled in words so leaving the game is obvious.
+- Bench Live Tracker: stat buttons, timer controls, lineup access, Undo, and End game use large targets (min 44×44px) and high contrast. Keep the existing scoring controls reachable without page scrolling on a phone; put substitution choices in a compact dialog/sheet.
 - Desktop dashboard: a decent but secondary experience — wider layout takes advantage of the extra space (charts side-by-side, game list as a sidebar) but there's no bench-specific desktop mode; you'll be running this from a phone or tablet courtside.
 
 ## 13. Scope decision
 
-Team-level stats only, with no per-player breakdown in v1. The event log has no `player_id`, which keeps the bench UI to the 7 buttons above with nothing to select before tapping. If you want per-player stats later, it's a clean additive migration on the same schema (add a nullable `player_id` column to `events`), not a redesign.
+Basketball event statistics remain team-level: no per-player shots, points, rebounds, turnovers, or possession attribution. The event log has no `player_id`, so stat buttons never require player selection. The separate playing-time feature keeps a reusable team roster and current-game local shifts, shows playing-time totals in the live tracker and immediate game summary, and discards those totals when leaving that summary. Do not upload playing-time shifts or add season-wide player usage history.
 
 ## 14. Multi-category readiness (U14, U15, …)
 

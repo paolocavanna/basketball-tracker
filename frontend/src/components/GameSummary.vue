@@ -9,6 +9,13 @@ import { livePath } from "../lib/route.ts";
 import { computeStats } from "../lib/stats.ts";
 import type { SyncManager } from "../lib/syncManager.ts";
 import type { StoredEvent, StoredGame } from "../../../types.ts";
+import type { GameTimerRecord, StoredGamePlayer, StoredPlayerShift } from "../../../types.ts";
+import {
+  calculateUsage,
+  elapsedGameSeconds,
+  formatPlayingTime,
+  savePlayingTimeOverride,
+} from "../lib/playingTime.ts";
 
 const props = defineProps<{
   gameId: string;
@@ -28,6 +35,12 @@ const opponentInput = ref("");
 const scoreError = ref("");
 const scoreMessage = ref("");
 const savingScore = ref(false);
+const gamePlayers = ref<StoredGamePlayer[]>([]);
+const playerShifts = ref<StoredPlayerShift[]>([]);
+const gameTimer = ref<GameTimerRecord | null>(null);
+const minuteInputs = ref<Record<string, string>>({});
+const minuteError = ref("");
+const savingPlayerId = ref("");
 
 const stats = computed(() => computeStats(events.value));
 const ppp = computed(() => formatPpp(stats.value.points_per_possession));
@@ -41,18 +54,62 @@ const winnerText = computed(() => {
   if (!current || !result) return "";
   return resultLabel(result, current.opponent_name, text.result);
 });
+const playerUsage = computed(() => calculateUsage(gamePlayers.value, playerShifts.value));
+const gameDuration = computed(() => elapsedGameSeconds(gameTimer.value));
+
+function parsePlayingTime(value: string): number | null {
+  const match = /^(\d{1,3}):([0-5]\d)$/.exec(value.trim());
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+async function savePlayerMinutes(playerId: string): Promise<void> {
+  const player = gamePlayers.value.find((entry) => entry.player_id === playerId);
+  const seconds = parsePlayingTime(minuteInputs.value[playerId] ?? "");
+  if (!player || seconds == null || seconds > gameDuration.value) {
+    minuteError.value = text.tracker.invalidMinutes;
+    return;
+  }
+  savingPlayerId.value = playerId;
+  minuteError.value = "";
+  try {
+    const saved = await savePlayingTimeOverride(props.store, player, seconds, gameDuration.value);
+    if (!saved) {
+      minuteError.value = text.tracker.invalidMinutes;
+      return;
+    }
+    gamePlayers.value = await props.store.loadGamePlayers(props.gameId);
+    minuteInputs.value[playerId] = formatPlayingTime(seconds);
+  } catch {
+    minuteError.value = text.tracker.notSaved;
+  } finally {
+    savingPlayerId.value = "";
+  }
+}
 
 onMounted(async () => {
   try {
-    const [storedGame, storedEvents] = await Promise.all([
+    const [storedGame, storedEvents, storedPlayers, storedShifts, storedTimer] = await Promise.all([
       props.store.loadGame(props.gameId),
       props.store.loadGameEvents(props.gameId),
+      props.store.loadGamePlayers(props.gameId),
+      props.store.loadPlayerShifts(props.gameId),
+      props.store.loadGameTimer(props.gameId),
     ]);
     if (!storedGame) {
       missing.value = true;
     } else {
       game.value = storedGame;
       events.value = storedEvents;
+      gamePlayers.value = storedPlayers;
+      playerShifts.value = storedShifts;
+      gameTimer.value = storedTimer;
+      minuteInputs.value = Object.fromEntries(
+        calculateUsage(storedPlayers, storedShifts).map((entry) => [
+          entry.player_id,
+          formatPlayingTime(entry.seconds),
+        ]),
+      );
       campusInput.value =
         storedGame.final_score_for == null ? "" : String(storedGame.final_score_for);
       opponentInput.value =
@@ -165,6 +222,39 @@ async function saveScore(): Promise<void> {
         <span class="stat-label">{{ text.tracker.turnoversShort }}</span>
       </p>
     </div>
+
+    <section
+      v-if="playerUsage.length"
+      class="player-time-summary"
+      aria-labelledby="player-time-title"
+    >
+      <h2 id="player-time-title">{{ text.tracker.playingTime }}</h2>
+      <div v-for="player in playerUsage" :key="player.player_id" class="player-time-row">
+        <div class="player-time-name">
+          <strong>{{ player.player_name }}</strong>
+        </div>
+        <span class="player-time-value">{{ formatPlayingTime(player.seconds) }}</span>
+        <label class="player-time-edit">
+          <span class="visually-hidden">{{ text.tracker.minutes }}: {{ player.player_name }}</span>
+          <input
+            v-model="minuteInputs[player.player_id]"
+            :aria-label="`${text.tracker.minutes}: ${player.player_name}`"
+            type="text"
+            inputmode="numeric"
+            :placeholder="text.tracker.timeFormat"
+          />
+        </label>
+        <button
+          type="button"
+          class="player-time-save"
+          :disabled="savingPlayerId === player.player_id"
+          @click="savePlayerMinutes(player.player_id)"
+        >
+          {{ text.tracker.saveMinutes }}
+        </button>
+      </div>
+      <p v-if="minuteError" class="form-error" role="alert">{{ minuteError }}</p>
+    </section>
 
     <form class="summary-score-form" @submit.prevent="saveScore">
       <p class="score-hint">{{ text.summary.scoreHint }}</p>

@@ -4,6 +4,7 @@ import type {
   GameStatistics,
   SeasonGame,
   SeasonSummary,
+  PlayerRecord,
 } from "../../../types.ts";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -101,4 +102,28 @@ export function readSeasonSummary(value: unknown): SeasonSummary {
 export function readGameDetail(value: unknown): GameDetail {
   if (!isGameDetail(value)) throw new Error("Invalid game response");
   return value;
+}
+
+export function readPlayerList(value: unknown): PlayerRecord[] {
+  if (!Array.isArray(value)) throw new Error("Invalid roster response");
+  return value.map((item) => {
+    if (
+      !isRecord(item) ||
+      typeof item.id !== "string" ||
+      typeof item.team_id !== "number" ||
+      !Number.isInteger(item.team_id) ||
+      typeof item.name !== "string" ||
+      typeof item.active !== "boolean" ||
+      typeof item.created_at !== "string" ||
+      Number.isNaN(Date.parse(item.created_at))
+    )
+      throw new Error("Invalid roster response");
+    return {
+      id: item.id,
+      team_id: item.team_id,
+      name: item.name,
+      active: item.active,
+      created_at: item.created_at,
+    };
+  });
 }
