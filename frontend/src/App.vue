@@ -21,15 +21,29 @@ const sync = createSyncManager({
 });
 
 function navigate(path: string): void {
+  clearTimingIfLeaving(parseRoute(path));
   history.pushState(null, "", path);
   route.value = parseRoute(location.pathname);
 }
 
 function onPopState(): void {
+  clearTimingIfLeaving(parseRoute(location.pathname));
   route.value = parseRoute(location.pathname);
 }
 
+function clearTimingIfLeaving(next: AppRoute): void {
+  const currentId =
+    route.value.name === "live" || route.value.name === "summary" ? route.value.gameId : null;
+  const nextId = next.name === "live" || next.name === "summary" ? next.gameId : null;
+  if (currentId && nextId !== currentId) {
+    void store.clearGamePlayingTime(currentId).catch(() => undefined);
+  }
+}
+
 onMounted(() => {
+  const gameId =
+    route.value.name === "live" || route.value.name === "summary" ? route.value.gameId : null;
+  void store.clearGamePlayingTimeExcept(gameId).catch(() => undefined);
   sync.start();
   window.addEventListener("popstate", onPopState);
 });

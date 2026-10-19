@@ -8,6 +8,13 @@
 import type {
   EventType,
   GameRecord,
+  GamePlayerRecord,
+  GameTimerRecord,
+  PlayerRecord,
+  PlayerShift,
+  StoredGamePlayer,
+  StoredPlayer,
+  StoredPlayerShift,
   GameStatus,
   NewStoredEvent,
   StoredEvent,
@@ -18,10 +25,14 @@ const DB_NAME = "basketball-tracker";
 // Version 2 adds `forcedDeletes`. A posted event can be reinserted after another
 // tab has already marked its tombstone synced, and that flag lives outside the
 // event row so the other tab's sync write cannot clear it.
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const GAMES = "games";
 const EVENTS = "events";
 const FORCED_DELETES = "forcedDeletes";
+const PLAYERS = "players";
+const GAME_PLAYERS = "gamePlayers";
+const PLAYER_SHIFTS = "playerShifts";
+const GAME_TIMERS = "gameTimers";
 const BY_GAME = "by_game";
 interface ForcedDelete {
   id: string;
@@ -114,6 +125,23 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(FORCED_DELETES)) {
         db.createObjectStore(FORCED_DELETES, { keyPath: "id" });
       }
+      if (!db.objectStoreNames.contains(PLAYERS)) {
+        const players = db.createObjectStore(PLAYERS, { keyPath: "id" });
+        players.createIndex("by_team", "team_id");
+      }
+      if (!db.objectStoreNames.contains(GAME_PLAYERS)) {
+        const gamePlayers = db.createObjectStore(GAME_PLAYERS, {
+          keyPath: ["game_id", "player_id"],
+        });
+        gamePlayers.createIndex(BY_GAME, "game_id");
+      }
+      if (!db.objectStoreNames.contains(PLAYER_SHIFTS)) {
+        const shifts = db.createObjectStore(PLAYER_SHIFTS, { keyPath: "id" });
+        shifts.createIndex(BY_GAME, "game_id");
+      }
+      if (!db.objectStoreNames.contains(GAME_TIMERS)) {
+        db.createObjectStore(GAME_TIMERS, { keyPath: "game_id" });
+      }
     };
 
     request.onsuccess = () => resolve(request.result);
@@ -149,6 +177,21 @@ export interface LocalStore {
   forcedDeleteIds(): Promise<string[]>;
   clearForcedDeletes(ids: string[]): Promise<void>;
   markDeletionsSynced(ids: string[]): Promise<number>;
+  savePlayer(player: PlayerRecord): Promise<StoredPlayer>;
+  cachePlayers(players: PlayerRecord[]): Promise<void>;
+  listPlayers(teamId: number): Promise<StoredPlayer[]>;
+  pendingPlayers(): Promise<StoredPlayer[]>;
+  markPlayerSynced(player: StoredPlayer): Promise<void>;
+  saveGamePlayers(players: GamePlayerRecord[]): Promise<void>;
+  loadGamePlayers(gameId: string): Promise<StoredGamePlayer[]>;
+  updateGamePlayer(player: GamePlayerRecord): Promise<void>;
+  savePlayerShift(shift: PlayerShift): Promise<void>;
+  deletePlayerShift(id: string): Promise<void>;
+  loadPlayerShifts(gameId: string): Promise<StoredPlayerShift[]>;
+  loadGameTimer(gameId: string): Promise<GameTimerRecord | null>;
+  saveGameTimer(timer: GameTimerRecord): Promise<void>;
+  clearGamePlayingTime(gameId: string): Promise<void>;
+  clearGamePlayingTimeExcept(gameId: string | null): Promise<void>;
 }
 
 export function createLocalStore({
@@ -414,6 +457,149 @@ export function createLocalStore({
         await Promise.all(found.map((event) => onDone(store.put({ ...event, synced: true }))));
         return found.length;
       });
+    },
+
+    savePlayer(player: PlayerRecord) {
+      const record: StoredPlayer = { ...player, synced: false };
+      return write(PLAYERS, async (store) => {
+        await onDone(store.put(record));
+        return record;
+      });
+    },
+
+    cachePlayers(players: PlayerRecord[]) {
+      return write(PLAYERS, async (store) => {
+        for (const player of players) {
+          const local = await readRecord<StoredPlayer>(store.get(player.id));
+          if (!local || local.synced) await onDone(store.put({ ...player, synced: true }));
+        }
+      });
+    },
+
+    listPlayers(teamId: number) {
+      return read(PLAYERS, (store) =>
+        readRecords<StoredPlayer>()(store.index("by_team").getAll(range.only(teamId))).then(
+          (players) => players.sort((a, b) => a.name.localeCompare(b.name)),
+        ),
+      );
+    },
+
+    pendingPlayers() {
+      return read(PLAYERS, (store) =>
+        readRecords<StoredPlayer>()(store.getAll()).then((players) =>
+          players.filter((player) => !player.synced),
+        ),
+      );
+    },
+
+    markPlayerSynced(expected: StoredPlayer) {
+      return write(PLAYERS, async (store) => {
+        const current = await readRecord<StoredPlayer>(store.get(expected.id));
+        if (!current) return;
+        if (
+          current.name === expected.name &&
+          current.active === expected.active &&
+          current.team_id === expected.team_id
+        )
+          await onDone(store.put({ ...current, synced: true }));
+      });
+    },
+
+    saveGamePlayers(players: GamePlayerRecord[]) {
+      return write(GAME_PLAYERS, async (store) => {
+        await Promise.all(players.map((player) => onDone(store.put({ ...player, synced: true }))));
+      });
+    },
+
+    loadGamePlayers(gameId: string) {
+      return read(GAME_PLAYERS, (store) =>
+        readRecords<StoredGamePlayer>()(store.index(BY_GAME).getAll(range.only(gameId))).then(
+          (players) => players.sort((a, b) => a.player_name.localeCompare(b.player_name)),
+        ),
+      );
+    },
+
+    updateGamePlayer(player: GamePlayerRecord) {
+      return write(GAME_PLAYERS, async (store) => {
+        await onDone(store.put({ ...player, synced: true }));
+      });
+    },
+
+    savePlayerShift(shift: PlayerShift) {
+      return write(PLAYER_SHIFTS, async (store) => {
+        await onDone(store.put({ ...shift, synced: true }));
+      });
+    },
+
+    deletePlayerShift(id: string) {
+      return write(PLAYER_SHIFTS, async (store) => {
+        await onDone(store.delete(id));
+      });
+    },
+
+    loadPlayerShifts(gameId: string) {
+      return read(PLAYER_SHIFTS, (store) =>
+        readRecords<StoredPlayerShift>()(store.index(BY_GAME).getAll(range.only(gameId))).then(
+          (shifts) => shifts.sort((a, b) => a.started_at.localeCompare(b.started_at)),
+        ),
+      );
+    },
+
+    loadGameTimer(gameId: string) {
+      return read(GAME_TIMERS, (store) => readRecord<GameTimerRecord>(store.get(gameId)));
+    },
+
+    saveGameTimer(timer: GameTimerRecord) {
+      return write(GAME_TIMERS, async (store) => {
+        await onDone(store.put(timer));
+      });
+    },
+
+    clearGamePlayingTime(gameId: string) {
+      return writeMany(
+        [GAME_PLAYERS, PLAYER_SHIFTS, GAME_TIMERS],
+        async ([players, shifts, timers]) => {
+          if (!players || !shifts || !timers)
+            throw new Error("Local playing-time stores unavailable");
+          const rows = await readRecords<StoredGamePlayer>()(
+            players.index(BY_GAME).getAll(range.only(gameId)),
+          );
+          const intervals = await readRecords<StoredPlayerShift>()(
+            shifts.index(BY_GAME).getAll(range.only(gameId)),
+          );
+          await Promise.all([
+            ...rows.map((row) => onDone(players.delete([row.game_id, row.player_id]))),
+            ...intervals.map((row) => onDone(shifts.delete(row.id))),
+            onDone(timers.delete(gameId)),
+          ]);
+        },
+      );
+    },
+
+    clearGamePlayingTimeExcept(gameId: string | null) {
+      return writeMany(
+        [GAME_PLAYERS, PLAYER_SHIFTS, GAME_TIMERS],
+        async ([players, shifts, timers]) => {
+          if (!players || !shifts || !timers)
+            throw new Error("Local playing-time stores unavailable");
+          const [playerRows, shiftRows, timerRows] = await Promise.all([
+            readRecords<StoredGamePlayer>()(players.getAll()),
+            readRecords<StoredPlayerShift>()(shifts.getAll()),
+            readRecords<GameTimerRecord>()(timers.getAll()),
+          ]);
+          await Promise.all([
+            ...playerRows
+              .filter((row) => row.game_id !== gameId)
+              .map((row) => onDone(players.delete([row.game_id, row.player_id]))),
+            ...shiftRows
+              .filter((row) => row.game_id !== gameId)
+              .map((row) => onDone(shifts.delete(row.id))),
+            ...timerRows
+              .filter((row) => row.game_id !== gameId)
+              .map((row) => onDone(timers.delete(row.game_id))),
+          ]);
+        },
+      );
     },
   };
 }

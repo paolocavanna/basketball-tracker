@@ -1,4 +1,4 @@
-import type { ApiEvent, EventType, ParsedGame, ValidationResult } from "../types.ts";
+import type { ApiEvent, EventType, ParsedGame, PlayerRecord, ValidationResult } from "../types.ts";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -172,4 +172,32 @@ export function parseEventBatch(body: unknown): { events: ApiEvent[] } | { error
   }
 
   return { events };
+}
+
+export function parsePlayer(
+  body: unknown,
+  teamId: number,
+  playerId: string,
+): ValidationResult<PlayerRecord> {
+  if (!isRecord(body)) return { error: "Expected a JSON object" };
+  if (body.id !== playerId || requireUuid(body.id, "id"))
+    return { error: "id must match the player URL" };
+  if (parsePositiveInt(body.team_id) !== teamId)
+    return { error: "team_id must match the team URL" };
+  if (typeof body.name !== "string" || !body.name.trim() || body.name.trim().length > 80) {
+    return { error: "name must contain 1 to 80 characters" };
+  }
+  if (typeof body.active !== "boolean") return { error: "active must be a boolean" };
+  if (typeof body.created_at !== "string" || Number.isNaN(Date.parse(body.created_at))) {
+    return { error: "created_at must be an ISO 8601 timestamp" };
+  }
+  return {
+    value: {
+      id: playerId,
+      team_id: teamId,
+      name: body.name.trim(),
+      active: body.active,
+      created_at: body.created_at,
+    },
+  };
 }

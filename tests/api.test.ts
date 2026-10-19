@@ -13,6 +13,8 @@ import { onRequestGet as onRequestGamesGet } from "../functions/api/games/index.
 import { onRequestPost as onRequestSync } from "../functions/api/games/[id]/events/sync.ts";
 import { onRequestGet as onRequestSeason } from "../functions/api/stats/season.ts";
 import { onRequestGet as onRequestTeams } from "../functions/api/teams.ts";
+import { onRequestGet as onRequestPlayers } from "../functions/api/teams/[teamId]/players/index.ts";
+import { onRequestPut as onRequestPlayerPut } from "../functions/api/teams/[teamId]/players/[playerId].ts";
 import type { DatabaseEnv, PagesContext } from "../types.ts";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -23,16 +25,27 @@ describe("games and events API", { concurrency: false }, () => {
 
   async function call(
     handler: (context: PagesContext) => Promise<Response>,
-    { url, params = {}, body }: { url: string; params?: Record<string, string>; body?: unknown },
+    {
+      url,
+      params = {},
+      body,
+      method: overrideMethod,
+    }: {
+      url: string;
+      params?: Record<string, string>;
+      body?: unknown;
+      method?: string;
+    },
   ): Promise<{ status: number; body: unknown }> {
     const method =
-      handler === onRequestPut
+      overrideMethod ??
+      (handler === onRequestPut
         ? "PUT"
         : handler === onRequestDelete
           ? "DELETE"
           : handler === onRequestSync
             ? "POST"
-            : "GET";
+            : "GET");
     const response = await handler({
       request: new Request(url, {
         method,
@@ -81,12 +94,64 @@ describe("games and events API", { concurrency: false }, () => {
       "SELECT name FROM sqlite_master WHERE type IN ('table', 'index')",
     );
     const names = objects.rows.map((row) => String(row.name));
-    for (const name of ["teams", "games", "events", "idx_games_team_id", "idx_events_game_id"]) {
+    for (const name of [
+      "teams",
+      "games",
+      "events",
+      "players",
+      "idx_games_team_id",
+      "idx_events_game_id",
+      "idx_players_team_id",
+    ]) {
       assert.ok(names.includes(name), name);
     }
     const eventsSql = await db.execute("SELECT sql FROM sqlite_master WHERE name = 'events'");
     assert.match(String(eventsSql.rows[0].sql), /ON DELETE CASCADE/);
     assert.match(String(eventsSql.rows[0].sql), /CHECK/);
+  });
+
+  it("stores and returns a reusable team roster", async () => {
+    const id = "0f8fad5b-d9cb-469f-a165-70867728950e";
+    const player = {
+      id,
+      team_id: 1,
+      name: "Ada Rossi",
+      active: true,
+      created_at: "2026-10-11T12:00:00.000Z",
+    };
+    const saved = await call(onRequestPlayerPut, {
+      url: `http://localhost/api/teams/1/players/${id}`,
+      params: { teamId: "1", playerId: id },
+      method: "PUT",
+      body: player,
+    });
+    assert.equal(saved.status, 200);
+    assert.deepEqual(saved.body, player);
+
+    const listed = await call(onRequestPlayers, {
+      url: "http://localhost/api/teams/1/players",
+      params: { teamId: "1" },
+    });
+    assert.deepEqual(listed.body, [player]);
+
+    const invalid = await call(onRequestPlayerPut, {
+      url: `http://localhost/api/teams/1/players/${id}`,
+      params: { teamId: "1", playerId: id },
+      method: "PUT",
+      body: { ...player, name: " " },
+    });
+    assert.equal(invalid.status, 400);
+
+    await getDb(env).execute({
+      sql: "INSERT INTO teams (id, name, category, slug) VALUES (2, 'Other', 'U14', 'other-u14')",
+    });
+    const conflictingTeam = await call(onRequestPlayerPut, {
+      url: `http://localhost/api/teams/2/players/${id}`,
+      params: { teamId: "2", playerId: id },
+      method: "PUT",
+      body: { ...player, team_id: 2 },
+    });
+    assert.equal(conflictingTeam.status, 409);
   });
 
   it("rejects rows the statistics rules do not allow", async () => {

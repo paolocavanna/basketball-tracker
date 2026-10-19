@@ -32,6 +32,16 @@ CREATE TABLE events (
 
 CREATE INDEX idx_events_game_id ON events(game_id);
 
+CREATE TABLE players (
+  id         TEXT PRIMARY KEY,
+  team_id    INTEGER NOT NULL REFERENCES teams(id),
+  name       TEXT NOT NULL,
+  active     INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX idx_players_team_id ON players(team_id);
+
 -- Seed the one team you actually have right now:
 INSERT INTO teams (name, category, slug)
 VALUES ('Campus Monferrato', 'U13', 'campus-monferrato-u13');

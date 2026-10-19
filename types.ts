@@ -33,6 +33,44 @@ export interface TeamRecord {
   slug: string;
 }
 
+export interface PlayerRecord {
+  id: string;
+  team_id: number;
+  name: string;
+  active: boolean;
+  created_at: string;
+}
+
+export type StoredPlayer = PlayerRecord & { synced: boolean };
+
+export interface GamePlayerRecord {
+  game_id: string;
+  player_id: string;
+  player_name: string;
+  available: boolean;
+  starter: boolean;
+  on_court: boolean;
+  manual_playing_time_seconds: number | null;
+}
+
+export type StoredGamePlayer = GamePlayerRecord & { synced: boolean };
+
+export interface PlayerShift {
+  id: string;
+  game_id: string;
+  player_id: string;
+  started_at: string;
+  ended_at: string | null;
+}
+
+export type StoredPlayerShift = PlayerShift & { synced: boolean };
+
+export interface GameTimerRecord {
+  game_id: string;
+  elapsed_ms: number;
+  running_since: string | null;
+}
+
 export type GameStatus = "in-progress" | "finished";
 
 export interface GameRecord {

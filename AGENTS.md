@@ -42,7 +42,7 @@ Derived statistics:
 
 There are deliberately no:
 
-- player statistics
+- player-attributed basketball statistics (shots, points, rebounds, turnovers, or possessions)
 - shot attempts
 - makes/misses
 - opponent statistics
@@ -350,6 +350,8 @@ Use IndexedDB, not:
 
 Each local record should contain its normal data plus synchronization state as needed.
 
+The reusable team roster syncs through the API. Current-game player snapshots, timer state, and shift intervals remain local only. Never upload them or treat them as historical stats; clear them when leaving the game or when opening the app outside that game.
+
 For events:
 
 ```text
@@ -364,13 +366,13 @@ synced
 Generate IDs using:
 
 ```js
-crypto.randomUUID()
+crypto.randomUUID();
 ```
 
 Generate timestamps on the client:
 
 ```js
-new Date().toISOString()
+new Date().toISOString();
 ```
 
 The timestamp represents when the event happened courtside, not when it was synchronized.
@@ -434,6 +436,8 @@ The intended API is:
 
 ```text
 GET    /api/teams
+GET    /api/teams/:teamId/players
+PUT    /api/teams/:teamId/players/:playerId
 PUT    /api/games/:id
 GET    /api/games?team_id=
 GET    /api/games/:id
@@ -472,6 +476,8 @@ The screen must contain:
 - always-visible Undo
 - always-visible End game button, labeled "End game" while the game is in progress
 - sync status indicator
+- elapsed game timer with manual start/pause controls
+- compact on-court lineup and a substitution sheet
 
 The seven primary buttons are:
 
@@ -502,6 +508,8 @@ Minimum target size:
 Prefer larger touch targets where practical.
 
 The tracker is mobile-first and optimized for one-handed use.
+
+The start screen maintains the reusable team roster, selects available players and five starters before a tracked game. Playing-time shifts are local-only, remain available through that game's summary, and are cleared when leaving it. They are not synced or included in season history. Roster records persist and sync.
 
 ---
 
@@ -616,16 +624,17 @@ unless explicitly requested.
 
 # 18. Scope boundaries
 
+The approved playing-time feature is a separate exception: maintain a reusable team roster, choose available players and five starters before a game, and track playing time with a manual elapsed timer and substitutions. Keep current-game timing records local-only; never sync them or add season-wide player-usage history. Keep them available through the immediate game summary, then clear them when leaving that game or opening the app outside it. Roster records themselves persist and sync.
+
 Do not implement these in v1:
 
-- player-level statistics
-- player management
+- player-attributed basketball statistics
 - shot charts
 - shot attempts
 - FG%
 - opponent statistics
 - possession-by-player
-- player selection
+- player selection before recording a team stat event
 - team administration
 - sophisticated authentication
 - real-time multi-user collaboration
@@ -774,7 +783,7 @@ Do NOT:
 - add a chart library
 - make API calls from the live tap path
 - store derived counters
-- create player entities
+- create player entities beyond the approved roster and per-game playing-time flow
 - create unnecessary abstractions
 - add features "that will probably be useful later"
 - replace IndexedDB with localStorage

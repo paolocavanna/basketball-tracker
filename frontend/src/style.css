@@ -106,6 +106,71 @@ a {
   min-height: var(--tap-min);
 }
 
+.playing-time-strip {
+  display: grid;
+  grid-template-columns: minmax(84px, 0.8fr) minmax(104px, 1fr) minmax(96px, 1fr);
+  gap: 7px;
+  align-items: center;
+}
+
+.game-clock {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.clock-caption {
+  color: var(--color-muted);
+  font-size: 0.62rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.clock-value {
+  color: var(--color-accent);
+  font-size: 1.15rem;
+  font-weight: 850;
+}
+
+.clock-toggle,
+.lineup-open {
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
+  padding: 5px 8px;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 60%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.lineup-open {
+  border-color: var(--color-faint);
+  color: var(--color-on-primary);
+}
+
+.court-names {
+  display: flex;
+  min-height: 22px;
+  gap: 5px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.court-name {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-faint);
+  color: var(--color-muted);
+  font-size: 0.65rem;
+  font-weight: 750;
+}
+
 /* The badge is a navy disc, so on the navy bench it needs a faint rim to keep
    its edge readable. */
 .bench .club-mark {
@@ -401,9 +466,157 @@ a {
   font-size: 1rem;
 }
 
+.roster-setup {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--color-faint);
+  border-radius: var(--radius);
+}
+
+.roster-setup h2 {
+  color: var(--color-accent);
+  font-size: 1rem;
+}
+
+.roster-add {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.roster-add-button,
+.roster-archive,
+.roster-check input {
+  min-height: var(--tap-min);
+}
+
+.roster-add-button {
+  padding-inline: 12px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 800;
+}
+
+.roster-player {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 6px 10px;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-faint);
+}
+
+.roster-player-name {
+  font-weight: 750;
+}
+
+.roster-check {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.roster-check input {
+  width: 20px;
+  min-height: 20px;
+  accent-color: var(--color-accent);
+}
+
+.roster-archive {
+  grid-column: 1 / -1;
+  justify-self: start;
+  padding: 4px 10px;
+  border: 1px solid var(--color-faint);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: 0.7rem;
+}
+
+.roster-hint {
+  color: var(--color-accent);
+  font-size: 0.78rem;
+}
+
 .form-error {
   color: var(--color-secondary);
   font-weight: 700;
+}
+
+.player-time-summary {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--color-faint);
+  border-radius: var(--radius);
+}
+
+.player-time-summary h2 {
+  color: var(--color-accent);
+  font-size: 1rem;
+}
+
+.player-time-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(66px, 0.5fr) auto;
+  gap: 7px;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-faint);
+}
+
+.player-time-name,
+.player-time-value {
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.player-time-value {
+  color: var(--color-accent);
+  font-weight: 850;
+}
+
+.player-time-edit input {
+  width: 100%;
+  min-height: var(--tap-min);
+  padding: 6px;
+  border: 1px solid var(--color-faint);
+  border-radius: 8px;
+  background: var(--color-surface);
+  color: var(--color-primary);
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.player-time-save {
+  min-height: var(--tap-min);
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.player-time-save:disabled {
+  opacity: 0.5;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .action:focus-visible,
@@ -997,14 +1210,18 @@ a {
   }
 }
 
-/* Landscape phone and any other short viewport: one row of +1 +2 +3, then
-   one row of the other four, plus a shorter header, score and tally. The
-   44px floor still fits above Undo and End game in a 320px-tall window,
-   which is the shortest phone this screen is aimed at. */
+/* Landscape phone and any other short viewport: hide the redundant court
+   name strip and let the bench screen scroll if the timer row leaves too
+   little height for the 44px stat and footer targets. */
 @media (height <= 560px) {
   .bench {
     gap: 4px;
     padding: max(4px, env(safe-area-inset-top)) var(--space) max(4px, env(safe-area-inset-bottom));
+    overflow-y: auto;
+  }
+
+  .court-names {
+    display: none;
   }
 
   .top {
@@ -1093,6 +1310,66 @@ a {
   border-radius: var(--radius);
   background: var(--color-primary);
   color: var(--color-on-primary);
+}
+
+.lineup-dialog {
+  width: min(480px, calc(100vw - 24px));
+  max-height: min(90svh, 720px);
+  overflow: auto;
+  padding: 18px;
+  border: 1px solid var(--color-faint);
+  border-radius: var(--radius);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.lineup-dialog::backdrop {
+  background: color-mix(in srgb, var(--color-primary) 78%, transparent);
+}
+
+.lineup-dialog h2 {
+  margin-bottom: 8px;
+  color: var(--color-accent);
+}
+
+.lineup-dialog > p {
+  margin-top: 14px;
+  color: var(--color-muted);
+  font-size: 0.85rem;
+}
+
+.lineup-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.lineup-option {
+  min-height: var(--tap-min);
+  padding: 6px 10px;
+  border: 1px solid var(--color-faint);
+  border-radius: 10px;
+  background: var(--color-surface);
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  font-weight: 750;
+}
+
+.lineup-option.selected {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+.lineup-undo {
+  width: 100%;
+  min-height: var(--tap-min);
+  margin-top: 8px;
+  border: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-accent);
+  font-weight: 800;
 }
 
 .finish-dialog::backdrop {
