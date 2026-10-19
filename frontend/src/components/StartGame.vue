@@ -27,6 +27,20 @@ const rosterError = ref("");
 const availableIds = ref<string[]>([]);
 const starterIds = ref<string[]>([]);
 const activeRoster = computed(() => roster.value.filter((player) => player.active));
+const defaultRoster = [
+  "Giulio Cavanna",
+  "Luigi Delrosso",
+  "Andrea Ramondino",
+  "Leonardo Dusio",
+  "Jamal Sokhna",
+  "Emanuele Ballone",
+  "Giorgio Costa",
+  "Isabel Bellone",
+  "Gemma Fare'",
+  "Gloria Dieng",
+  "Dario De Faveri",
+  "Matteo Tocchio",
+];
 
 function localDate(now = new Date()): string {
   const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -54,6 +68,23 @@ async function refreshRoster(): Promise<void> {
     }
   } catch {
     // The local roster is enough to prepare an offline game.
+  }
+  if (activeRoster.value.length === 0) {
+    const createdAt = new Date().toISOString();
+    const seeded = await Promise.all(
+      defaultRoster.map((name) =>
+        props.store.savePlayer({
+          id: crypto.randomUUID(),
+          team_id: teamId.value,
+          name,
+          active: true,
+          created_at: createdAt,
+        }),
+      ),
+    );
+    roster.value = [...roster.value, ...seeded].sort((a, b) => a.name.localeCompare(b.name));
+    playerNames.value = Object.fromEntries(roster.value.map((player) => [player.id, player.name]));
+    props.sync.kick();
   }
   if (availableIds.value.length === 0) {
     availableIds.value = activeRoster.value.map((player) => player.id);
@@ -163,6 +194,9 @@ async function start(): Promise<void> {
       </label>
       <section class="roster-setup" aria-labelledby="roster-title">
         <h2 id="roster-title">{{ text.start.roster }}</h2>
+        <p v-if="activeRoster.length" class="roster-hint">
+          {{ text.start.startersSelected.replace("{selected}", String(starterIds.length)) }}
+        </p>
         <div class="roster-add">
           <label>
             {{ text.start.playerName }}
